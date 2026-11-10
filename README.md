@@ -134,7 +134,7 @@ job logs and step summaries are not artifact-storage usage under GitHub's
 [Actions billing rules](https://docs.github.com/en/billing/concepts/product-billing/github-actions#examples-of-how-usage-is-measured).
 This is a source-associated UI validation job, not a general-purpose compute service.
 
-## Local repair status
+## Previous source-build repair
 
 The original metadata omitted seven descriptors encountered during local
 fresh-cache build and subsequent lint checks, blocking strict verification. Only 31 lines were
@@ -151,13 +151,61 @@ settings differed from GitHub's runner and are not included in this candidate.
 The 70 harness unit tests passed. Local lint also passed: 0 errors and 68 warnings.
 No emulator or device test was run: **0 of 19 device tests executed**.
 
-The public failure's raw Gradle log is unavailable. This repair fixes a locally
+The earlier build failure's raw Gradle log is unavailable. This repair fixes a locally
 reproduced missing-metadata failure; it does not prove that failure was the
 original Actions run's exact cause. The harness now publishes only a fixed
 build-failure category and integer exit code when available, never raw log text.
 
-These files were prepared locally only and do not authorize a remote update
-or another Actions run. The public file set remains source.zip, harness.zip,
-README.md, LICENSE and .github/workflows/isolated-ui.yml. LICENSE is unchanged.
-The repository owner must manually replace the workflow and review the resulting
-full commit SHA before any separately authorized single manual attempt.
+## Runtime preparation repair candidate
+
+The subsequent reviewed public attempt,
+[42775351202](https://github.com/origest/AutoAccounting-ui-tests/actions/runs/42775351202),
+built and audited both isolated APKs successfully, then stopped at
+`prepare-runtime / ValueError`. Its original KVM ACL was verified restored.
+The emulator never started and all 19 device UI cases were **not run**. The public
+transcript does not contain a traceback or a more detailed exception message.
+
+A separate local check downloaded only the already-pinned official AOSP 33 image
+and verified its complete 694,005,732-byte size and SHA-256. Its 19 members expand
+to 4,457,578,928 bytes; system.img alone is 4,306,501,632 bytes. The unchanged
+harness deterministically rejected that exact archive at its generic 4 GiB ZIP
+expansion limit before extracting any file. This proves a preparation blocker
+consistent with the remote summary, rather than supplying the absent CI traceback.
+
+This candidate adds a narrowly scoped image extractor. It checks the fixed full
+archive size and SHA-256 on one no-follow, owned regular-file handle, requires the
+exact 19-member name/type/mode/expanded-size contract, and applies only that image's
+measured 4,457,578,928-byte expansion budget. Hashing, metadata inspection and
+extraction use the same open file. The generic 4 GiB ZIP limit, source-only 150 MiB
+limit, path, symlink, duplicate, special-file and no-overwrite safeguards remain.
+No tool version, URL, checksum, source file, KVM rule or UI assertion changes.
+
+Before image extraction, free space must cover the full image expansion plus the
+unchanged 8,804,682,957-byte free-space floor and 16 MiB of filesystem headroom.
+Each write checks the reserved free space, and final checks verify free space
+and that the opened archive's identity/size/timestamps stayed unchanged.
+
+The candidate passed 85 local unit/mock tests (the previous 70 plus 15 new
+positive/negative checks). One local extraction of the full, verified official
+image succeeded in 23.569 seconds. All 19 extracted files matched the pinned ZIP's
+length and CRC, with 50,269,941,760 bytes of disk space still free afterward.
+This only validates safe runtime-file preparation: no emulator was started and
+**0 of 19 device UI tests executed** during this repair. No additional APK build,
+remote update or Actions run was performed. No runtime binary is in this delivery.
+
+This is a locally validated repair candidate, not a successful device-test run.
+Only harness.zip, README.md and the workflow's exact harness hash/size pins change.
+source.zip and LICENSE remain byte-for-byte identical to the successful-build
+inputs of attempt 42775351202. No new public diagnostic fields, raw log output,
+artifact upload, cache, credential, permission or automatic retry is added.
+
+The prior one-attempt authorization has already been used. Do not rerun the
+unchanged failed commit. The repository owner must manually replace harness.zip
+and README.md at the repository root and isolated-ui.yml under .github/workflows/.
+After those manual updates, all five public files and the complete resulting
+commit must be read back and verified. Then separately authorize one new manual
+attempt on that exact commit and, if needed, the same narrowly scoped temporary
+current-UID KVM access with verified restoration. No automatic repository write,
+new CI run, retry or broader permission is authorized by this candidate.
+The public file set remains source.zip, harness.zip, README.md, LICENSE and
+.github/workflows/isolated-ui.yml.

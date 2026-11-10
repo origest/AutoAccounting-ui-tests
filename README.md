@@ -36,13 +36,17 @@ apply to previously built APK bytes.
 
 ## Published source and build identity
 
-The full reviewed Gradle source is source.zip (1,813,551 bytes), SHA-256:
+The full reviewed Gradle source is source.zip (1,807,463 bytes), SHA-256:
 
-    aa0fbb10a9c545c342d8d4b7905afa205da0aeed075eae80167910775e57802f
+    3da6abbc130aa41bb7a14ac8e1a09e70c504318b9e74b43f93efeac3b0eb23df
 
 Its canonical source-tree SHA-256 is:
 
-    14c264553754c0f2a358a605a408c020a1164924e67336b013d190f35d14ed08
+    e4c3c23f36cba353b6fef2249238605f655efd719f15ccd864181d6766693a12
+
+The tree digest hashes UTF-8 lines sorted by complete relative POSIX path:
+six-digit octal permission mode, space, decimal byte size, space, lowercase
+file SHA-256, space, relative path, then LF.
 
 The root harness.zip contains readable Python scripts, unit tests,
 runtime-lock.json and the expected 19-method list. The sole workflow pins its
@@ -61,12 +65,19 @@ existing isolated tasks:
       --dependency-verification=strict -PisolatedUiTests=true \
       -Pandroid.builder.sdkDownload=false \
       -Dorg.gradle.java.installations.auto-download=false \
+      -Pkotlin.compiler.execution.strategy=in-process \
       :app:assembleIsolatedUi :app:assembleIsolatedUiAndroidTest
 
 The Gradle distribution and six official JDK/Android tool archives have fixed
 URLs, sizes and SHA-256 digests. Dependency verification uses the reviewed
-metadata without updating it or disabling verification. Its initial hashes came
+metadata without updating it or disabling verification. The initial hashes came
 from the existing build cache, not an independent cryptographic provenance audit.
+This repair adds seven missing POM/module descriptors, each checked byte-for-byte
+against HTTPS Maven Central bytes and the available checksum sidecar. The
+additions are Guava parent POMs 33.2.1-jre, 33.3.1-jre and 33.5.0-android,
+JUnit BOM modules 5.9.2 and 5.10.2, and coroutines BOM POMs 1.7.3 and 1.8.0. Two
+older Guava POMs have only SHA-1 sidecars; their SHA-256 pins were computed
+from the official bytes. The earlier cache-derived hashes are unchanged.
 
 Both APKs must match the dedicated package, manifest, SDK, signing and runner
 contracts. The target has only the isolated non-exported host activity and no
@@ -109,7 +120,7 @@ dependency binaries, databases and full build/emulator/instrumentation logs stay
 inside the temporary VM and are not printed. The five local evidence records
 are schema-checked, cross-checked and reconstructed before small synthetic
 JSON/XML results are printed and appended to the job summary (at most 1 MiB).
-These logs and summaries are public. Failure messages use fixed status codes.
+These logs and summaries are public. Failure messages use fixed status codes. Failed builds may additionally expose only a fixed diagnostic category and a bounded integer exit code; no matching log text is published.
 
 Passing requires each exact test method to start and complete once in order,
 with no unexpected method, failure, skip, duplicate or missing terminal result.
@@ -122,3 +133,31 @@ does not request paid/larger runners or billed artifact/cache storage. Public
 job logs and step summaries are not artifact-storage usage under GitHub's
 [Actions billing rules](https://docs.github.com/en/billing/concepts/product-billing/github-actions#examples-of-how-usage-is-measured).
 This is a source-associated UI validation job, not a general-purpose compute service.
+
+## Local repair status
+
+The original metadata omitted seven descriptors encountered during local
+fresh-cache build and subsequent lint checks, blocking strict verification. Only 31 lines were
+added to gradle/verification-metadata.xml; all other 946 source files, including
+all 545 protected Kotlin files and 19 UI tests, remain unchanged. No checksum
+or dependency version was replaced, and no verification setting was relaxed.
+
+The repaired source passed both APK assembly tasks using strict verification
+and a new build directory with an empty Gradle dependency cache: exit 0 in
+398.4 seconds, with all 137 tasks executed. The wrapper entry point ran with
+its already hash-verified Gradle distribution preseeded. The distribution
+download/redirect chain was not re-tested. Local home/network compatibility
+settings differed from GitHub's runner and are not included in this candidate.
+The 70 harness unit tests passed. Local lint also passed: 0 errors and 68 warnings.
+No emulator or device test was run: **0 of 19 device tests executed**.
+
+The public failure's raw Gradle log is unavailable. This repair fixes a locally
+reproduced missing-metadata failure; it does not prove that failure was the
+original Actions run's exact cause. The harness now publishes only a fixed
+build-failure category and integer exit code when available, never raw log text.
+
+These files were prepared locally only and do not authorize a remote update
+or another Actions run. The public file set remains source.zip, harness.zip,
+README.md, LICENSE and .github/workflows/isolated-ui.yml. LICENSE is unchanged.
+The repository owner must manually replace the workflow and review the resulting
+full commit SHA before any separately authorized single manual attempt.

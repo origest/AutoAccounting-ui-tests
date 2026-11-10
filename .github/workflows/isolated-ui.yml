@@ -94,3 +94,62 @@ jobs:
                   raise ValueError('Invalid harness archive')
               raw = bundle.read_bytes()
               if hashlib.sha256(raw).hexdigest() != expected_hash: raise ValueError('Harness hash mismatch')
+              for name in ('scripts', 'runtime-lock.json', 'expected-tests.json'):
+                  if os.path.lexists(workspace/name): raise ValueError('Harness destination already exists')
+              stage = Path(tempfile.mkdtemp(prefix='aa-harness-bootstrap-', dir=runner_temp))
+              names, total = set(), 0
+              # BytesIO keeps the checked bytes bound to extraction, with no path reopening.
+              from io import BytesIO
+              with zipfile.ZipFile(BytesIO(raw)) as archive:
+                  entries = archive.infolist()
+                  for info in entries:
+                      name = info.filename
+                      p = PurePosixPath(name)
+                      mode = info.external_attr >> 16
+                      if (info.orig_filename != name or '\x00' in info.orig_filename or name not in EXPECTED_FILES
+                              or p.is_absolute() or str(p) != name or '\\' in name
+                              or '..' in p.parts or '.' in name.split('/') or name in names
+                              or info.is_dir() or stat.S_IFMT(mode) not in (0, stat.S_IFREG)
+                              or info.flag_bits & 1): raise ValueError('Unsafe harness member')
+                      total += info.file_size
+                      if info.file_size > 128*1024 or total > 2*1024*1024: raise ValueError('Oversized harness')
+                      names.add(name)
+                  if names != EXPECTED_FILES: raise ValueError('Incomplete harness')
+                  for info in entries:
+                      target = stage/info.filename
+                      target.parent.mkdir(mode=0o700, exist_ok=True)
+                      data = archive.read(info)
+                      if len(data) != info.file_size: raise ValueError('Harness size mismatch')
+                      with target.open('xb') as out: out.write(data)
+                      target.chmod(0o600)
+              cfg = json.loads((stage/'runtime-lock.json').read_text(), object_pairs_hook=unique_object)
+              if (cfg.get('publication_review') != 'approved'
+                      or cfg.get('repository') != 'origest/AutoAccounting-ui-tests'
+                      or cfg['repository'] != os.environ['GITHUB_REPOSITORY']
+                      or cfg.get('public_scope') != 'source-only-no-apk'
+                      or cfg.get('temporary_kvm_uid_acl_authorized') is not True):
+                  raise ValueError('Unapproved harness scope')
+              for name in ('scripts', 'runtime-lock.json', 'expected-tests.json'):
+                  if os.path.lexists(workspace/name): raise ValueError('Harness destination appeared')
+                  os.rename(stage/name, workspace/name)
+              stage.rmdir()
+          # BOOTSTRAP_END
+          try:
+              bootstrap(Path.cwd(), Path(os.environ['RUNNER_TEMP']), 'b55e3d222ffec280f36091071ebde058dd74d0c1dedf43597b71add553ac33b8', 33495)
+          except Exception:
+              print('Harness bootstrap rejected; no repository script was executed.')
+              raise SystemExit(1)
+          PY
+      - name: Check harness parser locally
+        run: python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Build reviewed source and run one unrooted emulator
+        timeout-minutes: 26
+        run: python3 -B scripts/run_ui.py
+      - name: Verify restoration of temporary KVM access
+        timeout-minutes: 1
+        if: always() && steps.scope.outcome == 'success'
+        run: python3 -B scripts/kvm_access.py
+      - name: Publish validated synthetic status only
+        timeout-minutes: 1
+        if: always() && steps.scope.outcome == 'success'
+        run: python3 -B scripts/public_evidence.py

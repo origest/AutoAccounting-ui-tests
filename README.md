@@ -117,7 +117,7 @@ net.ankio.auto.isolated.IsolatedUiTestRunner.
 
 The workflow creates no Actions artifacts, caches, Packages or releases. APKs,
 dependency binaries, databases and full build/emulator/instrumentation logs stay
-inside the temporary VM and are not printed. The five local evidence records
+inside the temporary VM and are not printed. Up to seven local evidence records
 are schema-checked, cross-checked and reconstructed before small synthetic
 JSON/XML results are printed and appended to the job summary (at most 1 MiB).
 These logs and summaries are public. Failure messages use fixed status codes. Failed builds may additionally expose only a fixed diagnostic category and a bounded integer exit code; no matching log text is published.
@@ -126,7 +126,9 @@ Passing requires each exact test method to start and complete once in order,
 with no unexpected method, failure, skip, duplicate or missing terminal result.
 Successful adb process exit is not a passing suite. A published pass also
 requires matching APK identities, sufficient recorded disk space, and either no
-KVM permission change or verified restoration.
+KVM permission change or verified restoration. A pass additionally requires both
+restore-attempt diagnostics, no cleanup/evidence errors, and explicit verified
+termination of the owned runtime children. Partial observations never establish a pass.
 
 GitHub's standard hosted public-repository runner compute is free. This workflow
 does not request paid/larger runners or billed artifact/cache storage. Public
@@ -156,7 +158,7 @@ reproduced missing-metadata failure; it does not prove that failure was the
 original Actions run's exact cause. The harness now publishes only a fixed
 build-failure category and integer exit code when available, never raw log text.
 
-## Runtime preparation repair candidate
+## Previous runtime preparation repair
 
 The subsequent reviewed public attempt,
 [42775351202](https://github.com/origest/AutoAccounting-ui-tests/actions/runs/42775351202),
@@ -172,20 +174,20 @@ harness deterministically rejected that exact archive at its generic 4 GiB ZIP
 expansion limit before extracting any file. This proves a preparation blocker
 consistent with the remote summary, rather than supplying the absent CI traceback.
 
-This candidate adds a narrowly scoped image extractor. It checks the fixed full
+That preparation repair added a narrowly scoped image extractor. It checks the fixed full
 archive size and SHA-256 on one no-follow, owned regular-file handle, requires the
 exact 19-member name/type/mode/expanded-size contract, and applies only that image's
 measured 4,457,578,928-byte expansion budget. Hashing, metadata inspection and
 extraction use the same open file. The generic 4 GiB ZIP limit, source-only 150 MiB
 limit, path, symlink, duplicate, special-file and no-overwrite safeguards remain.
-No tool version, URL, checksum, source file, KVM rule or UI assertion changes.
+It did not change a tool version, URL, checksum, source file, KVM rule or UI assertion.
 
 Before image extraction, free space must cover the full image expansion plus the
 unchanged 8,804,682,957-byte free-space floor and 16 MiB of filesystem headroom.
 Each write checks the reserved free space, and final checks verify free space
 and that the opened archive's identity/size/timestamps stayed unchanged.
 
-The candidate passed 85 local unit/mock tests (the previous 70 plus 15 new
+That preparation candidate passed 85 local unit/mock tests (the previous 70 plus 15 new
 positive/negative checks). One local extraction of the full, verified official
 image succeeded in 23.569 seconds. All 19 extracted files matched the pinned ZIP's
 length and CRC, with 50,269,941,760 bytes of disk space still free afterward.
@@ -193,19 +195,91 @@ This only validates safe runtime-file preparation: no emulator was started and
 **0 of 19 device UI tests executed** during this repair. No additional APK build,
 remote update or Actions run was performed. No runtime binary is in this delivery.
 
-This is a locally validated repair candidate, not a successful device-test run.
-Only harness.zip, README.md and the workflow's exact harness hash/size pins change.
-source.zip and LICENSE remain byte-for-byte identical to the successful-build
-inputs of attempt 42775351202. No new public diagnostic fields, raw log output,
-artifact upload, cache, credential, permission or automatic retry is added.
+## Cleanup and diagnostic repair candidate
 
-The prior one-attempt authorization has already been used. Do not rerun the
-unchanged failed commit. The repository owner must manually replace harness.zip
-and README.md at the repository root and isolated-ui.yml under .github/workflows/.
-After those manual updates, all five public files and the complete resulting
-commit must be read back and verified. Then separately authorize one new manual
-attempt on that exact commit and, if needed, the same narrowly scoped temporary
-current-UID KVM access with verified restoration. No automatic repository write,
-new CI run, retry or broader permission is authorized by this candidate.
+The next reviewed public attempt,
+[42781547268](https://github.com/origest/AutoAccounting-ui-tests/actions/runs/42781547268),
+ran commit ec88168eab7e30edd7393c9afcca8b7db884170c. Its 85 harness tests passed;
+both APK builds/audits and runtime-image preparation completed. The emulator
+booted and execution reached instrumentation, where the command hit its unchanged
+600-second timeout. No per-case output or JUnit was published: all 19 UI-case
+outcomes from that attempt remain **unknown**, not all failed or all unstarted.
+Both the main finally and independent always-step reported KVM restoration
+unverified. The original internal restore error is not available in public logs,
+so this candidate does not claim to identify or fix that run's actual ACL failure.
+The job completed on a standard GitHub-hosted Ubuntu VM. GitHub documents automatic
+VM decommissioning after a hosted job, but there is no independent destruction
+telemetry here, and that lifecycle is not proof of ACL readback restoration.
+
+This local candidate adds diagnostic and cleanup safeguards without changing
+source.zip, LICENSE, the 19 UI assertions, tool pins, disk floor or ZIP limits:
+
+- KVM restoration reports fixed phase/reason enums, whether the scoped restore
+  command was attempted, whether the original ACL was reliably read back on the
+  same device, and whether its receipt was committed. Receipt/evidence failure
+  does not erase a successful readback, and cannot turn a failed readback into a
+  verified result. Either kind of failure still fails the job. Receipt loading
+  additionally rejects duplicate keys, unknown fields, wrong types, links and
+  changed file identity. Unknown ACL/device/receipt states still fail closed.
+- The first test/build failure stays in summary.json. cleanup.json independently
+  retains both KVM attempt results, runtime cleanup and fixed evidence-record
+  errors. No cleanup error replaces an earlier instrumentation TimeoutExpired.
+  Atomic JSON replacement retains the previous complete record on write failure.
+- instrumentation.json reports only the 19 allowlisted class/method identities
+  and passed/failed/skipped/started/unknown observations, plus a protocol state.
+  The bounded no-follow reader rejects unsafe or unstable files. Invalid input
+  yields unknown outcomes; raw messages, stacks, logs and unexpected identities
+  are never published. A complete partial protocol is not an alternative pass
+  gate: the original strict parser and JUnit pass requirements are unchanged.
+- Build, emulator, foreground adb server and adb clients run under dedicated
+  Python supervisors. Each supervisor is a new session and a child subreaper;
+  it reads only its own kernel children list, verifies kernel parentage using
+  waitid on pidfds, then signals that same process handle. There is no name-based
+  kill, arbitrary PID-tree scan or process-group signal. Verified cleanup requires
+  no remaining kernel children, including adopted descendants. Ownership or
+  capability uncertainty fails closed. Cleanup is bounded to 20 seconds.
+- A separate Python-only capability preflight runs before any KVM grant or build.
+  Missing Linux child-enumeration/pidfd/subreaper primitives stop early. The adb
+  server receives a supervisor-owned, already-bound loopback listener via
+  acceptfd; its port is never released and rebound. All clients use that explicit
+  endpoint and the same pinned adb binary; the emulator receives the same server
+  port. No default/global adb server is started or killed.
+
+Business limits are unchanged: 600 seconds for instrumentation, 240 seconds for
+boot, 900 seconds for build, 26 minutes for the main step and 30 minutes for the
+job. There is no timeout increase, automatic retry or attempt to bypass unknown
+ACL checks. New modules/tests are included in the exact bootstrap member list;
+the embedded workflow bootstrap and harness hash/size lock are updated together.
+
+Local integrated validation currently comprises 189 tests: 188 passed and one
+production-path process-enumeration test is explicitly skipped because this local
+execution environment lacks the required /proc thread children interface. Pure
+mock negative cases and short controlled Python process tests cover pidfd ownership,
+non-child rejection, adopted fixture descendants, signal resistance, interruption,
+FD inheritance and endpoint retention. Fixture-based enumeration is not a test of
+the unavailable production /proc discovery path. No adb server, emulator, Android
+program, real KVM operation, new APK build, remote update or CI run was performed
+for this candidate. Real Android/server integration and the full production
+process-discovery path remain unverified here. The new preflight may expose a
+missing runner capability, rather than proceed unsafely. No next-run success is
+promised.
+
+Only the public harness.zip, README.md and .github/workflows/isolated-ui.yml change.
+The workflow changes include the exact bootstrap member list and hash/size lock;
+its dispatch gate, runner, permissions and timeouts are unchanged. source.zip and
+LICENSE remain byte-for-byte identical. No raw log/artifact upload, cache, external
+credential, system permission change or automatic repository write is added.
+
+An earlier GitHub content-write attempt returned HTTP 403. This repair does not
+retry or work around that denial; publication remains an owner-performed manual
+replacement followed by read-only verification.
+
+The prior one-attempt authorization has already been consumed. Do not rerun the
+unchanged failed commit. After independent review, the repository owner can
+manually replace harness.zip and README.md at the repository root and
+isolated-ui.yml under .github/workflows/. All five public files and the complete
+resulting commit must then be read back and verified. A new exact-commit manual
+attempt and the same narrowly scoped temporary current-UID KVM access, if needed,
+require fresh authorization. Local preparation is not authorization to run it.
 The public file set remains source.zip, harness.zip, README.md, LICENSE and
 .github/workflows/isolated-ui.yml.

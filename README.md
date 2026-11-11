@@ -4,53 +4,91 @@ This source-only project builds a dedicated isolated application and runs 19 exa
 instrumentation methods on one Android 13 / API 33 x86_64 emulator. It is derived
 from [AutoAccounting](https://github.com/AutoAccountingOrg/AutoAccounting).
 
-## Lifecycle and C05 repair
+## Refund fixture and repeated-touch repair
 
-This revision integrates the independently reviewed local lifecycle/C05 repair
-with the public harness at commit
-`d0daf017a95c8dfacaafc974ef51df0f89231376`. It changes test code rather than only
-adding diagnostics. Local Android assembly and checks do not establish that the
-19 device tests pass. No device, emulator, ADB server, Xposed or CI run was started
-while preparing this revision. Publication does not authorize another run.
+This revision integrates the reviewed refund fixture repair with the public
+five-file bundle at commit `558c9fce287a77bd650363e5befda039642edcb3`.
+It retains the lifecycle/C05 safeguards described below. Local assembly and
+regressions are not a new device pass. No device, emulator, ADB server, Xposed or
+CI run was started while preparing this revision. Publication does not authorize
+another run.
 
 The latest completed public attempt remains
-[42953936158](https://github.com/origest/AutoAccounting-ui-tests/actions/runs/42953936158):
-**6 passed and 13 failed**. Execution ordinal 7 was C05,
-`actualRepeatedSwipesDoNotDuplicateRowsOrLeaveSpinnerRunning`, with
-`HELPER_DEADLINE`; the remaining 12 failures were `HELPER_PRIOR_GUARD`.
-Its failure_phase/failure_wait were UNKNOWN. Those later failures do not establish
-12 independent application bugs. The private terminal stack is unavailable, so this repair is not a reproduction of
-the exact device-side stall or proof of its business root cause.
+[42978720484, run #9](https://github.com/origest/AutoAccounting-ui-tests/actions/runs/42978720484),
+on that baseline commit: **19 complete results, 14 passed and 5 failed**. All ten
+DataPage cases, including C05, passed. Refund cases C11, C12, C13, C14 and C19 failed;
+C15, C16, C17 and C18 passed. All five failures have UNKNOWN hint, phase and wait;
+there was no HELPER_PRIOR_GUARD. C-numbers identify the fixed case list, not execution
+order. The original failure stacks are unavailable. The new source is not a
+reproduction or proof of the exact five device-side exceptions.
 
 That run also reported `invalid / BINARY_TRUNCATED / binary` progress, with all
 observations cleared and tail completeness unverified. Both KVM restoration
 attempts refused an unrecognized ACL without writing and did not verify exact
-restoration. Neither failure is suppressed or repaired by this revision.
+restoration. Neither defect is suppressed or repaired by this revision.
 
 ## Exact source scope
 
-The source ZIP is the frozen reviewed candidate: 953 files. Compared with the
-950-file source at the public baseline, 943 files are byte-identical, seven are
-modified and three verification files are added. Production application code,
-build definitions and dependencies are unchanged. All 19 test method names and
-all 18 non-C05 test bodies are byte-identical. C05's assertions are retained or
-strengthened. There are 553 protected file identities.
+The exact reviewed source ZIP contains **953 files**. Against the baseline above,
+949 files are byte-identical, four are modified, and none are added or deleted:
 
-The executable changes are limited to `UiTestDeadline.java`,
-`IsolatedUiFixture.kt`, `DataPageIsolatedUiTest.kt` and `SyntheticUiBackend.kt`.
-The other changes update protected identities and boundary descriptions, or add
-local regression verification. The backend addition observes the real gate,
-request ID and structured coroutine Job; it does not replace transport, Room or
-production reload/poll behavior. No two-arm probe variant is included.
+- `IsolatedUiApplication.kt`: the already guarded synthetic settings reset now
+  explicitly encodes `SETTING_ASSET_MANAGER=true` in its private MMKV store.
+- `RefundIsolatedUiTest.kt`: C14 and C18 use the existing
+  `screenBounds(onMain { ... })` helper for two repeated real touches.
+- `docs/BOUNDARIES.md` and `verification/protected-source.json`: describe and bind
+  those exact changes. The protected manifest still covers 553 file identities.
+
+All production source, resources, defaults, backend/transport, dependencies and
+build definitions are byte-identical. All 19 method names and every original
+assertion remain. C05, its helper lifecycle, all gesture counts, request gates,
+wait budgets and teardown guards are unchanged. All 953 members retain their
+original order and non-derived ZIP metadata, including all 104 original 0755
+entries, timestamps, comments, extra fields, creator fields and attributes.
+CRC, changed-file lengths and recompression offsets/sizes are derived fields.
+No two-arm probe variant is included.
+
+### Why the synthetic setting is required
+
+The old reset cleared settings without enabling asset management. The unchanged
+real getter therefore used the unchanged production default `false`.
+`PaymentInfoComponent.configureUIForBillType` hides the payment root in that
+state, including the shared refund-picker entry. The five failed cases use that
+entry; the four passing cases supply their links directly. This is a confirmed
+source-level prerequisite defect consistent with the observed partition. It does
+not establish that every observed exception, or all remaining runtime behavior,
+has been explained or repaired.
+
+The new value is written only after the existing isolated-package/component
+checks and only in the synthetic app-private store. The production default and
+visibility checks are untouched. It does not use the synchronizing preference
+setter. Manual sync stays true, AI/history/ChatGPT stay disabled, and the synthetic
+book still uses the local adapter. Existing `GET assets/list`, `GET assets/get`
+and refund-candidate routes remain synthetic and unchanged. Unexpected requests
+still fail teardown; no production fallback or new network endpoint is added.
+
+### Why the repeated-touch coordinates change
+
+The two old expressions passed root-view-relative visible rectangles to screen
+input. The existing helper adds the root's screen origin and rejects hidden or
+empty bounds. C14 now captures the visible retry bounds before the first touch
+hides that button; C18 preserves the disabled-but-visible save button as the
+second inert touch target. Both view lookups stay inside `onMain`.
+
+The actual new DEX invokes `onMain` and then `screenBounds` at C14 line 135 and
+C18 line 218. The real gestures and all counters/assertions remain. A zero root
+origin can mask the old coordinate error, so C18's earlier pass is not proof its
+second touch landed correctly. These independently found coordinate defects are
+not claimed to explain all five earlier failures. Real layout and input dispatch
+remain unverified for this new source.
 
 **The README and NOTICE inside the frozen source ZIP contain historical baseline
-statements.** In particular, claims that all original assertions are byte-identical,
-the synthetic boundary is unchanged, or an earlier build had 42 lint warnings do
-not describe this revision. The exact scope and current validation below take
-precedence. The accepted source bytes have deliberately not been edited merely
-to refresh that historical text.
+statements.** Assertions about unchanged synthetic boundaries, earlier test bodies
+or old lint warning counts do not describe the present integrated revision. The
+scope and current validation here take precedence. Accepted source bytes were not
+edited merely to refresh those historical documents.
 
-### Actual owned-task lifecycle
+### Retained owned-task lifecycle
 
 Owned tasks use monotonic `QUEUED -> RUNNING -> FINISHED` or
 `QUEUED -> CANCELLED_BEFORE_START` transitions. FINISHED is published by the
@@ -67,7 +105,7 @@ active-request-zero, unexpected-request/database, close/delete and transport
 replacement check remains, and any cleanup failure poisons the process.
 Callable completion alone is not proof that asynchronous descendants ended.
 
-### C05 causal and identity checks
+### Retained C05 causal and identity checks
 
 C05 still injects two real gestures. It now keeps both inserted database IDs,
 requires exactly the initial row before refreshing, and checks that the first
@@ -97,8 +135,8 @@ a platform block inside it remains a device/runtime limitation to investigate.
 The repository remains exactly five files: `source.zip`, `harness.zip`,
 `README.md`, `LICENSE` and `.github/workflows/isolated-ui.yml`. LICENSE is unchanged.
 The harness remains its exact original 28-member allowlist. Changes bind the new
-source size/SHA/canonical tree, strengthen exact source byte-length checking,
-refresh helper and DEX call-site mappings and their tests, and update the
+source size/SHA/canonical tree, refresh exact DEX call-site mappings and their
+tests, and update the
 workflow's exact harness hash/size pin. No new tool, dependency, permission,
 archive member, output field, raw-log retention or automatic retry is added.
 
@@ -113,7 +151,7 @@ complete ordered source/DEX caller chain. No line ranges, method prefixes,
 wildcard bridges, arbitrary frame skipping or inferred missing frames are used.
 Changed, omitted, duplicate, cross-case, nested or malformed frames remain
 UNKNOWN or preserve the existing protocol rejection. Prior-guard failures have
-UNKNOWN sites. The newly introduced cancellation error is not added to the hint
+UNKNOWN sites. The existing unrecognized cancellation error is not added to the hint
 allowlist and remains UNKNOWN.
 
 Primary stack matching is bounded to 32 KiB UTF-8 and 128 frames. Existing
@@ -127,34 +165,38 @@ execution attestation or root-cause conclusions.
 ## Exact mapping evidence
 
 Mapping is bound to source SHA-256
-`c8e9d02ba1e991114777e52d41432d6acbdfd8acf54d0b24f8a84b74565513c3`,
-the newly assembled instrumentation APK SHA-256
-`db9ddd889862c9e41835ce6474f659365d60d7855db8734dadf8f9fd8d668586`,
+`924a9da951d7f3d99e573023b764ee41c4a2b3112163a9afb7d3ee150bbab214`,
+the final source-built instrumentation APK SHA-256
+`63b9a4527f430548d02b6c06b434252d1bd5cda46f0a43059c6c763db84296b8`,
 and its classes4.dex SHA-256
-`9cb76a5ca8fdac65b9443935c47b2a71d8a3bde73dcab55e9c42bad6c5a4b182`.
+`99eecd540b686180f746e2a7c08fec2e29858052a4793497d3fdfb17eea1e0de`.
 APK/DEX hashes are evidence anchors, not a requirement that future signed APK
-bytes match. No old full APK or old mapping is presented as new-build evidence.
+bytes match. The exact archive, all final extracted source files, both APKs and
+all their DEX members were read back before generating the new table. No old
+full APK or source-hash-only substitution is presented as new mapping evidence.
 
 There are **441 exact expanded paths**, 333 literal rows and 14 actual D8 bridge
 pairs, covering all 19 case identities and the six shared lifecycle stages.
-The helper's fixed throw lines are now 102 (deadline), 106 (interrupted),
-19 (prior guard) and 119 (checked action). Six source-file hashes are independently
-bound by parser tests. All parser function bodies remain unchanged.
+The unchanged helper's fixed throw lines are 102 (deadline), 106 (interrupted),
+19 (prior guard) and 119 (checked action). Six exact source-file hashes are bound
+by parser tests. Every parser function body remains unchanged.
 
-The new gesture default-call frames and actual synthetic names/positions are
-checked against the new DEX. C05's first/second post-gesture IDLE paths are removed
-because the new false-idle branch cannot execute them. Its second-swipe MAIN and
-POLL_MAIN checks and post-second observation at BODY_C05_L171 are represented.
-Same-request observation and final ID/row checks remain separate.
+The new table derives literal invokes, positions, synchronous closure allocation
+and exact bridges from the compiled DEX. Against the previous table, 315 paths
+are unchanged and 126 stale paths are removed/replaced; all 126 removed chains
+are rejected. Identical unchanged chains remain valid, so no claim is made that
+every old trace is distinguishable. Changed later refund line numbers are also
+refreshed, not only the two edited call sites. C05's existing false-idle branch
+and all its causal/identity paths remain unchanged.
 
-Complete local enumeration found 478 possible fixed chains, but **37 shorter
-chains are deliberately excluded** because deleting frames from a longer same-case
-chain could imitate them. Missing-frame tests still require UNKNOWN; they were
-not relaxed to increase hit rate. Initial view lookups within C05 swipes and some
-direct click lookups remain conservatively UNKNOWN. File-only frames are allowed
-only for each exact named no-position $r8 bridge, paired with its exact
-D8$$SyntheticClass:0 frame. Unknown Source and guessed bridge names/lines are
-never repaired.
+Complete local enumeration found **480 possible fixed expanded chains**. **39
+shorter chains are deliberately excluded** because deleting frames from a longer
+same-case chain could imitate them. This includes the new C14/C18 same-line
+onMain-only lookups: the full screenBounds chain is recognized, but omission of
+its screenBounds frame stays UNKNOWN. Missing-frame tests are not relaxed to
+increase hit rate. File-only frames remain allowed only for the exact named
+no-position $r8 bridge, paired with its exact D8$$SyntheticClass:0 frame.
+Unknown Source and guessed bridge names or lines are never repaired.
 
 Actual ART formatting, inlining and future-build synthetic-name stability are
 not device-verified. Unrecognized runtime formatting remains UNKNOWN. Deliberately
@@ -164,39 +206,59 @@ refer to constructed exact call chains, not Android passes or an expected hit ra
 
 ## Local validation of this revision
 
-- Real Android target and instrumentation assembly plus lint: **BUILD SUCCESSFUL**
-  in 5 minutes 50 seconds, 208 tasks executed. Lint reports **0 errors and 68
-  warnings**; the warnings are retained, not suppressed or reclassified.
-- `:app:testIsolatedUiUnitTest` reports **NO-SOURCE**, so it is not a passing unit
-  test suite. The explicit JVM regression below supplies separate local coverage.
-- Actual helper JVM regression: **18 groups passed**, including **2,000 concurrent
-  start-versus-timeout races**, running the exact candidate and immutable original
-  helper. The original completed-at-deadline and cancelled-running defects are
-  reproduced. Android teardown in that test is explicitly a policy model.
-- C05 source-linked checks: **10 passed**. They inspect real source relationships,
-  not device gesture execution. Protected-source verification: **553 identities
-  and all 19 original method names passed**.
-- Final ZIP bootstrap and complete harness suite: **313 tests, 312 passed and
-  one existing capability skip**. The skip is native kernel child-process
+- The exact mode-preserving final source ZIP was freshly extracted and built:
+  **BUILD SUCCESSFUL in 5 minutes 40 seconds, all 208 tasks executed**. Target and
+  instrumentation APK assembly and lint completed. Lint reports **0 errors and
+  64 warnings**; warnings are retained, not suppressed or reclassified. Integration
+  independently read back those exact final outputs rather than repeating a build
+  of identical source. Earlier drafts/builds are not final evidence.
+- `:app:testIsolatedUiUnitTest` reports **NO-SOURCE**, not a passing unit suite.
+- Exact extracted settings/getter/component JVM contracts: **12 groups passed**;
+  exact screen-coordinate helper: **9 groups passed**. Storage, visibility and
+  geometry use explicit boundary doubles, not native MMKV or Android views.
+  Four mutation negatives (false prerequisite, omitted root origin, ignored
+  hidden result and ignored empty bounds) each fail the JVM assertions.
+- Actual compiled LocalRefunds/models/Gson and complete BillSelectionLoader:
+  **12 groups passed**. Exact DAO SELECT statements: **8 local SQLite checks**.
+  These establish local backend/loader/query contracts, not Android Room runtime,
+  migrations, transactions or rendered picker behavior.
+- Actual deadline-helper JVM regression: **18 groups passed**, including **2,000
+  concurrent start-versus-timeout races**. The exact immutable original helper's
+  defects are reproduced; Android teardown is explicitly a policy model.
+- Exact four-file source/route checks: **9 passed**. C05 source-linked checks:
+  **10 passed**. Protected-source verification: **553 identities and all 19
+  original method names passed**. No device gesture execution is implied.
+- Real final ZIP bootstrap and complete harness suite: **314 tests, 313 passed
+  and one existing capability skip**. The skip is native kernel child-process
   enumeration, so that production supervision path remains unverified here.
-  A local parent-process guard allowed only controlled Python subprocess fixtures,
-  rejected device/nonlocal actions and recorded no prohibited attempt. The guard
-  is local validation tooling, not part of the public harness.
-- The parser's **85 tests** cover all 441 full paths, helper hints, source pins,
+  A local parent-process guard allows only controlled Python subprocess fixtures
+  and local sockets, and recorded no prohibited operation. It is not part of the
+  public harness.
+- The parser's **86 tests** cover all 441 full paths, helper hints, source pins,
   missing/duplicate/reordered/changed frames, exact bridges, nested/cross-case
   lures, size limits, schema consistency, privacy and unchanged success handling.
-  Local chain/DEX inspection is not a captured ART-stack test.
-- All 953 source-file hashes still match the accepted frozen manifest after the
-  build. Target and test package/manifest/signing/vendor-payload audits passed.
+  Additional finite-map adversarial checks passed **22,076 assertions**, including
+  all 126 removed stale paths and multi-frame deletion ambiguity. Constructed
+  traces and DEX inspection are not captured ART-stack tests.
+- All 953 final source-file bytes match the accepted archive after its build.
+  Both APK signatures and strict package/manifest/runner checks passed. Target
+  APK: **43,517,380 bytes**, SHA-256
+  `f5fc3cf61e44db8fbc151e68c7c3b7c8fec1e70c268327f1b40119b345f0d0c4`.
+  Instrumentation APK: **1,005,427 bytes**, SHA-256
+  `63b9a4527f430548d02b6c06b434252d1bd5cda46f0a43059c6c763db84296b8`.
+  Both use the same public certificate SHA-256
+  `fe88012d81d36765c33e9d8ce9bca8c6b32905107f8cab8531b7f2b6faceac73`.
+  Neither APK nor a signing key is included in the publication.
 
-To reproduce the JVM comparison, extract the new ZIP into `source/` and place the
-original baseline source ZIP beside that directory as `source.zip`. Obtain the
-original only from the exact baseline commit above and verify SHA-256
+To reproduce the deadline JVM comparison, extract the new ZIP into `source/` and
+place the legacy baseline ZIP beside that directory as `source.zip`. Obtain that
+legacy input from commit `d0daf017a95c8dfacaafc974ef51df0f89231376` and verify SHA-256
 `a0352fcf35b668d1ff1cb41e14b5fe6320dde9054c70f861d2c8029e8e7419df`.
-`python3 source/scripts/test-ui-deadline.py` intentionally rejects any other
-baseline. The current candidate ZIP must not be substituted for that old input.
-Run `test-c05-source-contract.py` and `verify-source-boundaries.py` from the same
-scripts directory for the other local source checks.
+`python3 source/scripts/test-ui-deadline.py` rejects any other baseline. Neither
+the current candidate nor the immediately preceding source ZIP is that legacy
+input. Run `test-c05-source-contract.py` and `verify-source-boundaries.py` from
+that same scripts directory for the included source checks. Additional integration
+contracts and their local outputs are outside the source-only five-file layout.
 
 The new source was extracted from the exact frozen ZIP into a separate directory.
 Official pinned JDK 21, Gradle 8.11.1, SDK platform 36 and Build Tools 35.0.0 were
@@ -204,7 +266,10 @@ reused. Build outputs and project cache were separate from the earlier compile.
 The existing dependency-download cache was reused, with strict Gradle dependency
 verification, no build cache, no configuration cache, no scan and no SDK or Java
 auto-download. No dependency checksum was altered or verification disabled.
-Cache-derived pins are not an independent cryptographic provenance audit.
+Integration also byte-compared all consumed regular files in the pinned JDK,
+Gradle, Build Tools and platform archives with their existing extracted toolchains.
+Mapping dexlib2/Guava hashes match unchanged strict dependency metadata.
+Cache-derived pins are not an independent upstream provenance audit.
 
 The complete JDK used only process-local references to the existing system Java
 truststore and credential-free environment proxy. TLS and hostname validation
@@ -222,13 +287,13 @@ debug certificate. Binary redistribution is outside this publication scope.
 
 ## Source and build identity
 
-source.zip: **1,830,422 bytes**, SHA-256:
+source.zip: **1,824,328 bytes**, SHA-256:
 
-    c8e9d02ba1e991114777e52d41432d6acbdfd8acf54d0b24f8a84b74565513c3
+    924a9da951d7f3d99e573023b764ee41c4a2b3112163a9afb7d3ee150bbab214
 
 Canonical source-tree SHA-256 (953 files):
 
-    da083af5ddc7cb19c74369896ed493255071098b9f3788076d52e17493ab94f3
+    b7dc9a3f5846c1d77639e5846eda270ad3e50022e733ea5d0dab32cb6d189e68
 
 The tree digest hashes UTF-8 lines sorted by complete relative POSIX path:
 six-digit octal permission mode, space, decimal byte size, space, lowercase file

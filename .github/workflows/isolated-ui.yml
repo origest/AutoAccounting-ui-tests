@@ -138,7 +138,7 @@ jobs:
               stage.rmdir()
           # BOOTSTRAP_END
           try:
-              bootstrap(Path.cwd(), Path(os.environ['RUNNER_TEMP']), '108d44933c2c0a1afc85d51ad717cdcc885b5d49915840fca7b62812704cf5a6', 111161)
+              bootstrap(Path.cwd(), Path(os.environ['RUNNER_TEMP']), '55eedc16151f9dea178a083d50f3ad8fe5bc8554737fe37c08b6383c6e2cee86', 111441)
           except Exception:
               print('Harness bootstrap rejected; no repository script was executed.')
               raise SystemExit(1)

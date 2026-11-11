@@ -1,333 +1,206 @@
 # AutoAccounting isolated UI validation
 
-This source-only test project is derived from
-[AutoAccounting](https://github.com/AutoAccountingOrg/AutoAccounting). It builds
-a dedicated isolated application from reviewed source and runs 19 exact
-instrumentation methods on one fresh Android 13 / API 33 x86_64 emulator.
+This source-only project builds a dedicated isolated application and runs 19 exact
+instrumentation methods on one Android 13 / API 33 x86_64 emulator. It is derived
+from [AutoAccounting](https://github.com/AutoAccountingOrg/AutoAccounting).
 
-## Current local diagnostic candidate
+## Current harness-only diagnostic candidate
 
-This source-only candidate repairs two locally reproduced diagnostic defects:
-first-failure reporting through JUnit/AndroidX, and classification of ordinary
-Android binary logcat records. It has not been published or run on a device.
-The actual initial UI/helper failure, the actual bytes that caused the previous
-`BINARY_TAG` result, and the actor or timing of the KVM ACL change remain unknown.
-Local diagnostic repair is not proof of a fixed application defect or a passing
-UI suite. No automatic retry is added.
+This candidate adds **fixed failure call-site diagnostics for future complete
+instrumentation terminals**. It does not change Android source, APK behavior,
+assertions, guards, timeouts, cleanup, KVM handling or the strict success gate.
+It has not been published or tested on Android. It does not repair or identify
+the underlying UI failure, and does not authorize another run.
 
-The latest completed public attempt was
-[42931502732](https://github.com/origest/AutoAccounting-ui-tests/actions/runs/42931502732/job/130231114373),
-commit `1c621b05534a0b551d9c442a27505efe70957beb`, attempt 1. It built and audited
-both APKs, passed all 278 harness tests without skips, then reported **19 complete
-terminal outcomes: 6 passed and 13 failed**. The primary summary was
-`instrumentation / ValueError`, not a 600-second command timeout. The job lasted
-464 seconds; this is not a per-test or instrumentation duration.
+The frozen public baseline is
+`c0246e3d8a4306c73451b62465824c381f6917fb`. The latest completed attempt is
+[42944460874](https://github.com/origest/AutoAccounting-ui-tests/actions/runs/42944460874/job/130273795850).
+Its 295 harness self-tests passed, then all 19 terminal outcomes were observed:
+**6 passed, 13 failed**. Execution ordinal 7 was C05,
+`actualRepeatedSwipesDoNotDuplicateRowsOrLeaveSpinnerRunning`, with
+`HELPER_DEADLINE`. The remaining 12 failures were `HELPER_PRIOR_GUARD`.
+Those later terminals do not establish 12 independent application bugs.
 
-Its observed execution ordinals 1 through 6 passed, in this order:
+That deadline means the shared helper's remaining budget was exhausted or its
+timed Future.get expired. It does **not** prove the main thread was continuously
+blocked for 12 seconds. An await shares one deadline across its polls and can
+expire at the last budget edge even if the final action has completed. The old
+terminal stack was private and is not available here. Setup, body, first/second
+swipe, await and teardown therefore cannot be reconstructed for that run.
 
-1. nonSuccessAndMissingDataNeverMasqueradeAsEmpty (C03)
-2. transportFailureShowsErrorAndActualRetryTapRecovers (C02)
-3. successfulEmptyResponseShowsEmptyNotError (C01)
-4. actualTypeFilterAndSearchTextSurviveVisibleRefreshAndReentry (C08)
-5. activityRecreationRestoresNewFragmentFiltersPagesAndScroll (C10)
-6. multiPagePassiveRefreshKeepsLoadedPageCountAndVisibleRowOffset (C09)
+Its progress result was `invalid / BINARY_TRUNCATED / binary`, with observations
+cleared and tail completeness `unverified`. This means an incomplete binary frame
+was detected, not which producer or transport layer lost data. The unchanged
+collector may still produce that result. It is not repaired or relaxed here.
+The terminal path below does not depend on usable logcat progress.
 
-Ordinal 7, actualRepeatedSwipesDoNotDuplicateRowsOrLeaveSpinnerRunning (C05),
-and ordinals 8 through 19 all failed with `HELPER_PRIOR_GUARD`. C05 was the first
-observed failed case, but that hint does not identify its first exception or
-prove that its body, swipe, or any particular UI stage ran. The output array is
-still in configuration order; execution order comes from the recorded ordinals.
-Thirteen failed terminals do not establish thirteen independent application
-bugs. The local reproduction below shows distinct first errors can produce
-exactly this same state/ordinal/hint projection.
+Both KVM restoration attempts refused an unrecognized ACL without writing,
+reported `restore_verified=false`, and retained a pending receipt. Exact KVM
+restoration remains unverified. The new diagnostics do not change that refusal.
 
-Progress was `invalid / BINARY_TAG / binary`, with all times and observations
-cleared and `tail_completeness="unverified"`. That enum identifies a rejecting
-boundary. The original failing raw bytes were not published and are unavailable;
-no particular empty tag, long tag, truncated message, or malformed target marker
-can be attributed to the real run. The candidate cannot recover those bytes or
-retroactively recover a case duration or step sequence.
+## Exact update scope
 
-Owned build/runtime termination was verified. Both KVM restoration attempts
-refused an unknown ACL at `acl_compare / KVM_ACL_CHANGED_EXTERNALLY`, with
-`write_attempted=false`, `restore_verified=false`, and receipt `pending`.
-That is not successful exact restoration; ending the VM is not ACL readback
-proof. The unchanged KVM interpretation and refusal are detailed below.
+Only **three repository files** are update candidates:
 
-Earlier attempts remain historical evidence. Run
-[42839027012](https://github.com/origest/AutoAccounting-ui-tests/actions/runs/42839027012)
-also completed with 6 passes and 13 failures, but did not publish execution
-ordinals or fixed failure/progress reasons. Run
-[42805128904](https://github.com/origest/AutoAccounting-ui-tests/actions/runs/42805128904)
-reached the 600-second command timeout with 6 passed, 1 started and 12 unknown.
-Neither older result should be substituted for the latest complete result.
+1. `harness.zip`.
+2. `README.md`.
+3. `.github/workflows/isolated-ui.yml`, with only the harness SHA-256/size pin changed.
 
-## What changes in this candidate
+`source.zip` and `LICENSE` are byte-for-byte unchanged. Source remains 950 members,
+548 protected files, 19 exact test methods and 72 assertion calls. Harness remains
+28 members. Inside it, only four existing members change: `scripts/result_parser.py`,
+`scripts/public_evidence.py`, `scripts/test_result_parser.py` and
+`scripts/test_diagnostic_evidence.py`. No new archive member, output record,
+download, raw-log retention, permission, ADB command or Android dependency is added.
 
-Four repository files change: `source.zip`, `harness.zip`, this README, and the
-workflow's harness hash/size pin. `LICENSE` remains byte-for-byte unchanged.
-There are **950 source members**, **548 protected files**, and **28 harness
-members**. Source changes are limited to the fixture's rule wrapper, a new
-`UiTestFailureRule.java`, and the protection manifest's corresponding hashes.
-Harness changes are limited to `progress_capture.py`, its existing test file,
-and source ZIP/tree identity in `runtime-lock.json`.
+The existing runtime lock, source ZIP/tree pins, all tool pins, bootstrap and
+workflow logic are unchanged. The original `parse_output`, `junit_xml` and
+`_failure_hint` function bodies are unchanged. Existing instrumentation acceptance,
+protocol-invalidity behavior, 2 MiB/16 KiB/16384-line budgets and 19-success gate
+remain unchanged. No failing or skipped terminal becomes a pass.
 
-Production UI, both test classes, all 19 test identities and 72 assertion calls,
-await predicates, `UiTestDeadline`, cleanup and poison behavior, the emitter,
-dependencies and tool pins are unchanged. The strict success parser, JUnit
-output generator, partial-result hint parser and public schemas are unchanged.
-Only the source hash/size/tree binding and harness hash/size workflow pin change
-outside the two diagnostic components. No local build adaptation is packaged.
+## Fixed terminal call-site fields
 
-### Preserve the first test failure
+Each case in diagnostic `instrumentation.json` retains class, method, state,
+execution_ordinal and failure_hint and adds:
 
-The actual JUnit 4.13.2 notifier expands `MultipleFailureException` into separate
-failure callbacks. AndroidX Test Runner 1.6.2's `InstrumentationResultPrinter`
-reuses the terminal bundle and overwrites its stack on each callback. When the
-first timeout or interruption poisons the helper and `@After` subsequently
-throws a prior-guard error, the last callback can hide the first exception in
-that case's terminal stack. The strict parser cannot recover an error that was
-overwritten before it received the bundle.
+- `failure_phase`: fixed lifecycle stage, C05 swipe stage, or a fixed
+  `BODY_Cnn_Lnnn` value identifying the selected test method's outer call line.
+  For example BODY_C01_L042 is the call at line 42 in C01's frozen source method.
+  These are literal reviewed enums, not arbitrary input text or inferred ranges.
+- `failure_wait`: `MAIN`, `POLL_MAIN`, `IDLE` or `CLEANUP`, identifying the helper
+  caller chain. POLL_MAIN specifically requires the full await chain.
+- Failed cases without a complete recognized chain use `UNKNOWN` for both fields.
+  All nonfailed states, including skipped, started and unknown, use
+  `NOT_APPLICABLE` for both. Prior-guard failures remain UNKNOWN: they do not
+  establish a newly attempted wait.
 
-A pure-JVM reproduction uses the unchanged deadline helper, actual JUnit, and
-unmodified relevant AndroidX runner source with explicitly synthetic Android
-boundary stubs. Setup timeout, body timeout and body interruption each reproduce
-the real run's exact 19-case state/ordinal/hint projection. Setup timeout enters
-only six bodies, while body timeout/interruption enter seven. This proves the
-public projection is insufficient to choose among these causes; it does not
-identify the real trigger.
+Known sites require one of the unchanged exact first-helper hints
+HELPER_DEADLINE, HELPER_INTERRUPTED or HELPER_CHECKED_ACTION. Public validation
+checks case, state, hint, phase and wait together, including allowed phase/wait
+pairs. A phase from a different case or a partial UNKNOWN/known pair is rejected.
+The unchanged successful JUnit XML still contains only the 19 exact success cases;
+it is not derived from a site or partial diagnostic.
 
-The fixture now wraps its existing `TestWatcher` with a test-only failure rule.
-After the existing before/body/after/watcher sequence has finished, the rule
-flattens aggregate failures in their original order, rethrows the first original
-Throwable, and preserves later distinct errors as suppressed exceptions. It does
-not skip cleanup, clear poison, change cancellation, or turn a failure into a
-pass. For suppression-disabled or malformed/empty aggregate edge cases, a fixed
-fail-closed wrapper retains errors instead of claiming every Throwable can stay
-at the top level. Identity-based cycle/duplicate handling prevents
-self-suppression and recursive traversal failure.
+The parser processes only a legally terminated, matching case bundle. It matches
+the **complete ordered first Throwable caller chain**, including fixture methods,
+static lambdas, exact D8 bridges, step wrappers and a unique case/lifecycle root.
+It does not collect an unordered set of plausible frames. Suppressed exceptions,
+Caused by sections, stream prose, other cases and concatenated errors cannot
+supply missing call-site evidence. Unrecognized, misplaced, repeated, changed or
+omitted relevant frames yield UNKNOWN, or preserve the original invalid protocol.
+It never repairs or guesses a missing bridge, source filename or line.
+Only the exact primary chain through its root is recognized: additional runner
+frames also yield UNKNOWN. Secondary headers, indentation and elisions are
+structure-checked without using their call-site content. Enclosed elision counts
+cannot exceed the directly enclosing Throwable's complete frame count.
 
-For the normal helper cases, the first helper header can now reach the existing
-allowlisted top-level hint classifier. Ordinary/uncertain first errors remain
-`UNKNOWN`; nested helper-looking secondary errors do not establish a helper
-cause. Secondary Throwables remain in memory, but AndroidX `StackTrimmer` can
-trim printed trace content. This is not a promise of complete raw secondary
-traces, and raw stacks remain unpublished. All original result/strict-pass gates
-continue to apply.
+Diagnostic matching additionally requires at most 32 KiB of UTF-8 stack text and
+128 primary frames. These stricter call-site-only bounds leave the original
+failure hint and protocol budgets unchanged. They reject AndroidX's 65537-character
+truncation output even when a cut happens to end on otherwise valid syntax.
+No raw stack, error message, path, view text, environment, URL, UID or PID is
+published by this projection. Only fixed enums leave the private parser.
 
-Official library references:
-[JUnit 4.13.2 notifier](https://github.com/junit-team/junit4/blob/r4.13.2/src/main/java/org/junit/internal/runners/model/EachTestNotifier.java)
-and [AndroidX runner 1.6.2 source archive](https://dl.google.com/dl/android/maven2/androidx/test/runner/1.6.2/runner-1.6.2-sources.jar).
+This console input is not authenticated. A byte-for-byte fabrication of another
+complete accepted chain cannot be distinguished from that chain. The values are
+call-site observations, **not proof of main-thread blockage, a business root cause,
+execution of all preceding steps, or an independent test-success result**.
 
-### Discard ordinary log records before parsing target bodies
+## Frozen mapping and coverage limits
 
-Released Android 13 source permits an empty ordinary tag, tags longer than
-128 bytes, and tag bytes that are not strict UTF-8. Its 4068-byte transport cap
-can truncate the ordinary message's final NUL, or leave no message bytes after
-a complete tag. Binary `logcat -B` output bypasses display-tag filtering, so an
-ordinary record can reach the UID stream even with the fixed display filter.
-The previous relay applied target-like tag/body constraints before deciding
-whether a frame contained the fixed progress tag. This is a confirmed format
-compatibility defect, not proof that any particular such frame caused this run.
+Source pin: `a0352fcf35b668d1ff1cb41e14b5fe6320dde9054c70f861d2c8029e8e7419df`.
+Mapping evidence reuses the prior local instrumentation build, SHA-256
+`ece4440493edfd6af24627dff66dfb132f47bfb4404a4ece0efd3439beaad5e3`, and its
+classes4.dex, SHA-256
+`af20e4259ddcb46124af08f39ef5508eb6495562a5318fcf93ce849295767974`.
+These are evidence anchors, not a promise that a fresh APK's signed bytes match.
+No Android rebuild or toolchain download was performed for this candidate.
 
-The relay still acquires exactly one complete bounded frame and validates its
-header, UID/PID, main buffer, timestamp and allowed priority before classification.
-It finds the first tag NUL within that frame, then compares tag bytes exactly:
+Exact source invocation sites and existing JVM line tables were checked against
+DEX bridge call relationships. The allowlist contains 14 exact D8 bridge pairs.
+Each inner $r8$lambda$HASH has its original fixed .kt SourceFile but no positions;
+its precise **file-only** token, such as `(IsolatedUiFixture.kt)`, is allowed only
+for that named bridge at that exact position. Its paired external synthetic
+invoke frame has exact `D8$$SyntheticClass:0`. This is not a wildcard for missing
+line numbers. Unknown Source, guessed negative/zero lines on the inner bridge,
+unknown hashes, mismatched synthetic numbers and file-only ordinary frames are
+not accepted. Simplified JVM chains with the D8 bridges removed are not accepted.
 
-- A complete non-target tag causes the whole frame to be discarded in memory.
-  Empty/long/non-strict-UTF-8 tags and opaque ordinary bodies are not decoded,
-  normalized, repaired, retained, or accepted as progress.
-- Missing tag NUL still invalidates the collection. No scan crosses into the
-  next frame and no framing recovery or resynchronization is attempted.
-- The exact target still requires INFO, the original 160-byte payload envelope,
-  final NUL, bounded ASCII tokens, sequence/nesting checks, and unchanged second
-  decoding. Prefix/lookalike tags never become target records. Source/time/PID
-  checks also apply to discarded noise and maintain stream continuity.
+The map has 440 accepted ordered paths across all 19 cases: body calls plus each
+case's six shared lifecycle paths. Lifecycle stages are SETUP_RESET, SETUP_IDLE,
+TEARDOWN_HOST_FINISH, TEARDOWN_HOST_DESTROYED, TEARDOWN_REQUESTS and TEARDOWN_DATABASE.
+C05 includes SWIPE_SHOW, SWIPE_INITIAL_ROWS, SWIPE_FIRST, SWIPE_REQUEST_OBSERVED,
+SWIPE_SECOND, SWIPE_FINAL_ROWS and SWIPE_FINAL_ERROR. Initial, observed-request
+and final-row awaits remain separate. First and second swipe bounds/idle paths
+remain separate. MAIN is not silently interpreted as POLL_MAIN or IDLE.
 
-The generic minimum payload changes from four to three bytes to include
-priority + empty tag NUL + empty message NUL. The defensive maximum stays 4096;
-retention and runtime limits do not increase. Some malformed three-byte inputs
-therefore reach a later rejecting validator rather than `BINARY_HEADER`; they
-remain invalid. Fixed-tag acceptance and retained bytes are unchanged.
+Thirty-seven valid shorter call paths are deliberately excluded because the same
+text could be produced by deleting a frame from a longer same-case path. This is
+an extra conservative choice, not a claim that the shorter paths cannot execute.
+In particular **C05's initial view lookup within either swipe is UNKNOWN**;
+the corresponding screenBounds MAIN and post-gesture IDLE paths remain covered.
+Some other direct click lookups are likewise unknown. Pointer IPC, activity
+startup/monitor waits, ordinary await-condition exhaustion, action-thread-only
+exceptions, and all unlisted paths remain UNKNOWN rather than being mislabeled.
 
-Official fixed Android 13 source references:
-[writer](https://android.googlesource.com/platform/system/logging/+/6bfb380b168c7127d79977a0e931d6e5e469d887/liblog/logger_write.cpp),
-[4068-byte transport clipping](https://android.googlesource.com/platform/system/logging/+/6bfb380b168c7127d79977a0e931d6e5e469d887/liblog/logd_writer.cpp),
-[logd credentials and stored length](https://android.googlesource.com/platform/system/logging/+/6bfb380b168c7127d79977a0e931d6e5e469d887/logd/LogListener.cpp),
-[text renderer truncation handling](https://android.googlesource.com/platform/system/logging/+/6bfb380b168c7127d79977a0e931d6e5e469d887/liblog/logprint.cpp),
-and [Java/JNI log bridge](https://android.googlesource.com/platform/frameworks/base/+/0d3ff311e6e80dee7fe88a2a2cfa272ce231c3c6/core/jni/android_util_Log.cpp).
-These are upstream source facts, not an observation of the failed downstream
-image's bytes. No text-renderer repair is copied into target validation.
-
-### Existing diagnostic and success boundaries
-
-Execution ordinals remain protocol-observed start order, not independent device
-attestation. Failure hints still require an allowlisted top-level helper header
-and matching first frame; uncertain, nested or concatenated-root failures remain
-`UNKNOWN`. An exact aggregate header can yield only the `MULTIPLE_FAILURES`
-type hint. Hints do not grant a pass or identify a first cause independently.
-
-Progress reasons/phases remain fixed closed enums. The first stream or terminal
-error is latched before status persistence. Invalid diagnostics clear all case
-times, active case, open steps and last-event time. Ordinary noise alone yields
-missing progress, never invented events. Public tail completeness remains
-mandatory and `unverified`. The original exact 19-case success parser and JUnit
-output remain byte-for-byte unchanged.
-
-## Existing collector and helper boundaries
-
-The unchanged 12-second helper budget includes bounded main-thread work, idle
-callbacks and diagnostics. Queued timed-out callbacks are cancelled. An
-already-running action may still finish after cancellation; the helper poisons
-further test actions, and subsequent setup/teardown fails explicitly. This does
-not turn a timeout into a pass. Real sendPointerSync IPC and real swipes remain;
-there is no direct business trigger replacing a swipe.
-
-Fixed Log.i markers identify cases C01-C19 and BEGIN/END/ERROR steps with a
-strictly increasing process-wide sequence and relative elapsed milliseconds.
-Detailed main/idle/pointer/swipe steps are accepted only for C05, the repeated
-swipe case. A CASE END records completion, not a passing assertion.
-
-The diagnostic-only logcat reader uses the existing owned runtime, private ADB
-endpoint and same verified emulator. It requests only the main buffer for the
-unique UID of the just-installed target APK. Android 13 binary output bypasses
-display-tag filters; the relay checks frames before retaining only exact bounded
-ASCII IsolatedUiStep messages. Frames with complete non-target tags are discarded in memory after the
-source/frame checks described above. The UID is checked against the complete bounded user-0 package/UID
-inventory, rather than assumed to be the test APK UID. Every frame must match that UID, one positive consistent PID, the main buffer
-and a fresh guest-clock boundary. Only retained progress markers additionally
-require INFO priority and the exact fixed tag. UID/PID are backed by logd peer credentials; TID and
-realtime are client-supplied, not independent kernel attestation. The clock is
-only a freshness check. Mixed identities, PID changes, replay, sequence gaps,
-truncated frames, malformed target encoding and excessive output are rejected. No UID, PID,
-absolute timestamp, raw line, stack, environment, ACL text or private path is
-published.
-
-The stream starts before instrumentation and shares its original 600-second
-budget plus the existing 18/20-second supervisor cleanup. It has no independent
-600-second lifetime or new watchdog. Retention remains capped at 2 MiB and 8192
-fixed-tag frames; source parsing remains capped at 8 MiB. Excess bytes are
-discarded until existing owned cleanup, not retained. Only after verified
-owned-process termination are stable, no-follow, owned regular files parsed.
-There is no post-timeout ADB command, log clear, new server, app restart, new
-privilege or timeout extension. The 660-second guest-clock freshness rejection
-window is only an input validation bound, not additional runtime.
-
-Binary stdout can lose whole trailing frames during shutdown even if the prefix
-is valid. `active_case` and `last_event_ms` describe only the observed prefix,
-not the actual final state. Truncated frames and sequence gaps are rejected, but
-missing whole tails are not detectable. EOF/termination races may conservatively
-produce invalid diagnostics. No recovery or retry is added. The real collector
-path has not produced verified progress evidence; this candidate remains
-device-unverified. Mock packet checks do not establish successful real capture.
-
-First test/build failure remains in `summary.json`; cleanup and evidence-write
-failures are recorded separately. Collector setup timeout/control/interrupt
-failures preserve the original exception and prevent instrumentation from
-starting on the stopped runtime. Only nonterminal diagnostic failures are
-best-effort. Collection and cleanup failures cannot replace an earlier failure.
-
-## KVM mask interpretation and unchanged refusal
-
-Each of the latest main and always cleanup observations contains two sets of
-six boolean ACL differences, not raw ACL text. **Conditional on the reviewed source's lease validation and
-correct public projection**, each refusal observation implies that the original
-ACL had no mask and no named entries, with owning-group permissions `rw-`; the
-current ACL lacks the temporary current-UID named entry and differs from the
-original only by an additional `mask::rw-`.
-
-At each observed device identity and fixed credentials, that structure has the
-same ACL discretionary-access decisions as the original: owning-group `rw-`
-intersected with mask `rw-` is unchanged. This is a source-constrained deduction,
-not a raw-ACL observation or proof that the current process could not open KVM.
-It does not identify an actor, time of change, intermediate state, external open
-file descriptor, other access mechanism or later permissions.
-
-The extra mask is still a structural difference, so exact restoration is false.
-A mask can affect later chmod or setfacl behavior even when current DAC decisions
-are equal. In general, removing a mask can expand group permissions, and named
-entries require a mask. No general mask-removal authorization follows from this
-example. See [acl(5)](https://man7.org/linux/man-pages/man5/acl.5.html) and
-[setfacl(1)](https://man7.org/linux/man-pages/man1/setfacl.1.html).
-
-This candidate does not change `kvm_access.py`, its public ACL schema, restore
-commands or allowed-write states. Unknown ACLs are still refused without writes;
-the inferred structure is **not** added to the restore allowlist. Both failed
-attempts remain failed, and the receipt remains pending.
+**Actual ART stack formatting and future-build synthetic-name stability have not
+been verified.** Bridge renaming, omitted/inlined frames or other runtime differences
+can yield UNKNOWN even for a covered source call. No next-run hit rate or UI success
+is promised. A separately authorized device run could evaluate that coverage;
+this candidate is not a reason to repeat a run blindly.
 
 ## Local verification and remaining limits
 
-The integrated harness discovered **295 local tests: 294 passed and one was
-explicitly skipped**. The unchanged baseline discovered 278: 277 passed with the
-same native thread-children enumeration skip. Controlled Python-process fixtures
-do not verify that unavailable production enumeration path. A local runner guard
-permitted only reviewed Python fixture subprocesses, prohibited real KVM opening
-and nonlocal connections, and recorded zero prohibited attempts. This test-only
-guard is not included in the package.
+The local complete harness suite discovered **310 tests: 309 passed, one skipped**.
+The skip is the existing native kernel-children enumeration capability test;
+that production runtime path was not verified in this container. The original
+295-test baseline has the same capability skip locally. Neither skip is described
+as an Android pass.
 
-The failure rule passed 10 unchanged deadline contract checks, seven synthetic
-actual-library lifecycle scenarios, 24 aggregate/error edge checks, and seven
-original-parser/public-schema/strict-gate projection checks. Independent review
-repeated these component checks. These are JVM mechanisms with Android boundary
-stubs, not Android UI executions. The actual Kotlin fixture was checked by the separate
-Android compilation described below.
+The parser suite has 84 tests. Added checks exercise all 440 accepted paths with
+all three supported get-failure hints and both failure codes, field/schema pairs,
+all 19 identities, lifecycle/body distinctions, missing/duplicate/reordered frames,
+bridge errors, source/file/class/method drift, cross-case tails, suppressed/cause
+and stream lures, concatenated errors, partial/malformed terminals, privacy canaries,
+32 KiB and official-truncation boundaries, and unchanged success/JUnit/hint bodies.
 
-The integrated deterministic comparison used **17,000 synthetic inputs**:
-3,000 sequence-parser inputs and 14,000 binary inputs each tested through both
-decoders and both stream filters. Counts overlap, not 31,000 independent inputs.
-All parser and decoder results were identical. The candidate filter matched an
-independently written source/frame oracle on all binary inputs; 11,195 stream
-results were identical and 2,805 differences were confined to ordinary tag/body
-classification and the three-byte minimum. A 5,000-input target/source/framing
-subset preserved acceptance and retained bytes; 41 malformed three-byte inputs
-changed only the rejection boundary. Within those binary inputs, 2,000
-ordinary-noise projections retained exactly the original two target markers. No new target frame was
-accepted. These are bounded regression checks, not proof over all possible inputs.
+A short Java model reused the original UiTestDeadline and UiTestFailureRule,
+actual JUnit 4.13.2 and the official AndroidX Test Runner 1.6.2 printer/StackTrimmer.
+All 440 complete synthetic DEX-chain serializations retained the primary Throwable
+and passed the new terminal/schema/privacy projection. Android APIs were explicit
+boundary stubs and the stack frames were constructed inputs. These are transport
+contract checks, **not captured ART stacks or Android UI test executions**.
 
-Source members, protection hashes, both unchanged test classes, their 19 methods
-and 72 assertions, helper and production source were checked against the exact
-previous archive. The integrated ZIP/tree/lock/workflow chain was checked, with
-only the listed source and harness changes. The 28-member allowlist and embedded
-bootstrap are unchanged. No repository test expectation, strict-success rule, cleanup check,
-source-identity check, or runtime budget was changed to obtain a pass.
+The earlier local Android build and the latest remote build concern the unchanged
+source, not this new parser's Android coverage. No device, CI, ADB server, emulator,
+KVM action, security/permission change or remote write occurred in this integration.
+Independent review and exact archive/reference verification are required before
+any publication. There is no claim of a final accepted review in this README.
 
-The frozen new source compiled **both APKs successfully** in a separate local
-build using the command below with strict dependency verification: exit 0,
-373.9 seconds, 137 Gradle tasks executed. All 950 source members' modes, sizes
-and hashes and the input ZIP remained unchanged; the 548 protection hashes and
-19-method list were rechecked after building. No saved old APK was used.
+## Unchanged helper, collector and KVM safeguards
 
-Fresh local APK identities (verification only; APKs are not packaged or uploaded):
+The process-wide guard is never reset after a timed-out/interrupted action.
+Cancellation of a Future, isDone or isCancelled does not prove a running action
+has stopped. Cleanup remains guarded and bounded. The original first-failure rule
+preserves the first Throwable through JUnit while later errors remain secondary;
+none of these source behaviors is changed here.
 
-- Target: 43,517,344 bytes, SHA-256
-  `2425768f4926f2af615694ddf69fc49fa9511ce586157545ab970c49e90adf13`.
-- Instrumentation: 988,343 bytes, SHA-256
-  `ece4440493edfd6af24627dff66dfb132f47bfb4404a4ece0efd3439beaad5e3`.
+Logcat retains only complete exact fixed-tag markers after existing source/frame
+validation. Ordinary messages are discarded in memory, not published. Invalid
+progress clears observations, and tail completeness remains unverified. Missing
+whole tails cannot be inferred from a valid prefix. The same 600-second shared
+instrumentation budget, 18/20-second owned cleanup, 2 MiB/8192 retained-frame limit,
+8 MiB source parsing and no post-timeout ADB rules remain. No frame reassembly or
+collector shutdown behavior is changed to suppress BINARY_TRUNCATED.
 
-Both passed archive integrity, exact package/manifest/component/runner checks,
-excluded-vendor-payload checks and `apksigner verify`; their signer certificates
-matched. Neither requests permissions or contains production components under
-the existing audit. No Gradle Java process remained after this local build.
-
-The local build used isolated tool/home/cache directories and process-only
-settings for the existing system truststore and a credential-free network proxy.
-TLS/hostname checks and strict dependency verification remained enabled; the
-system truststore and source files were not changed. These settings, tools,
-APKs, local keys and raw logs are outside all delivery packages. The deliberately
-minimal local tool set had no platform-tools; its warning did not block the
-build, and no ADB was installed or run.
-
-The separate local build wrapper had a 1200-second wait cap; the build finished
-in 373.9 seconds, within the unchanged production 900-second build budget. It
-did not exercise the production owned-runtime supervisor, its timeout path, or
-device cleanup. The repository's 600/240/900/26/30 limits are unchanged. Local
-compilation and APK audit do not verify instrumentation on Android.
-
-No new CI/device attempt, ADB server, emulator, real KVM operation, security or
-permission change, or remote write was performed for this candidate. Passing
-local tests and compiling APKs are not a successful real capture, a passing UI
-suite, or proof that the next attempt will succeed. The real first UI/helper
-failure and real progress-invalidity trigger remain unresolved.
+The reviewed ACL diagnostic implies, at each latest refusal observation, an
+additional mask::rw- over original group::rw- without named entries. That can be
+DAC-equivalent at that instant, conditional on the source-constrained projection,
+while still failing exact restoration. It does not identify the actor, actual
+open result, intermediate state or later permissions. The extra mask is not
+added to any restoration allowlist. Unknown ACL changes are refused without
+writes; both failed restoration attempts remain failed and their receipt pending.
 
 ## Source and build identity
 
@@ -421,23 +294,13 @@ This requests no paid/larger runner or billed artifact/cache storage.
 
 ## Owner-performed update after review
 
-The earlier GitHub content-write HTTP 403 remains unresolved; this candidate
-does not retry or bypass it. The repository keeps exactly five files. After
-independent review, manually replace these **four** files:
+The prior GitHub content-write HTTP 403 is not retried or bypassed here. After
+independent review and separate publication authorization, replace only the three
+files listed above. Keep source.zip and LICENSE byte-for-byte unchanged, keep the
+repository's five-file layout, and do not add another differently named workflow.
+Verify exact file hashes, workflow pins and the new full commit after updating.
 
-1. source.zip at the repository root.
-2. harness.zip at the repository root.
-3. README.md at the repository root.
-4. isolated-ui.yml under .github/workflows/ (exact name).
-
-Keep `LICENSE` unchanged. The four-file update ZIP contains precisely these four
-relative paths; the complete five-file package additionally contains LICENSE.
-Neither package includes APKs, build adaptations, raw logs, or private review
-notes. Do not create a second differently named workflow. Verify all five exact
-file hashes and the new full commit after updating.
-
-The previous one-attempt authorization is consumed. A new single run and the
-same narrow temporary current-UID KVM access, if needed, require fresh user
-authorization against that verified commit. Local preparation, build and review
-are not authorization to upload to Space, publish, run CI/device tests or change
-real KVM permissions. Independent review must finish before any such request.
+The earlier one-attempt authorization is consumed. A new single run and the same
+narrow temporary current-UID KVM access, if required, need fresh user authorization.
+Manual dispatch requires the exact reviewed full commit and
+`RUN_ONCE_AFTER_PUBLICATION_REVIEW`. This README does not grant that authorization.

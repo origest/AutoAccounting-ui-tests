@@ -1,0 +1,264 @@
+name: Read-only runner metadata
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact reviewed commit containing this workflow
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  metadata:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'origest/AutoAccounting-ui-tests' &&
+      toJSON(github.event.repository.private) == 'false' &&
+      github.ref == 'refs/heads/main' &&
+      github.run_attempt == '1' &&
+      inputs.expected_commit == github.sha &&
+      github.workflow_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Read bounded metadata only
+        shell: /usr/bin/python3 -I -B -S {0}
+        run: |
+          """Metadata only: no device open, ioctl, mutation, subprocess or network."""
+          import json
+          import os
+          import stat
+          import sys
+
+          MAX_GROUPS = 64
+          MAX_CPU_BYTES = 16384
+          MAX_JSON_BYTES = 4096
+
+          def bounded_int(value, limit):
+              if type(value) is not int or not 0 <= value <= limit:
+                  raise ValueError("invalid numeric metadata")
+              return value
+
+          def read_cpu_flags(opener=open):
+              # Only a bounded prefix, and only the first complete flags line.
+              with opener("/proc/cpuinfo", "r", encoding="ascii", errors="strict") as stream:
+                  prefix = stream.read(MAX_CPU_BYTES)
+              for line in prefix.splitlines(keepends=True):
+                  if not line.endswith("\n"):
+                      continue
+                  key, separator, value = line.partition(":")
+                  if separator and key.strip() == "flags":
+                      tokens = set(value.split())
+                      return {name: name in tokens for name in ("vmx", "svm", "hypervisor")}
+              raise ValueError("complete first flags line unavailable")
+
+          def node_type(mode):
+              for predicate, name in ((stat.S_ISCHR, "character"),
+                                      (stat.S_ISLNK, "symlink"),
+                                      (stat.S_ISREG, "regular"),
+                                      (stat.S_ISBLK, "block"),
+                                      (stat.S_ISDIR, "directory")):
+                  if predicate(mode):
+                      return name
+              return "other"
+
+          def node_identity(value):
+              # Internal change detection only; device/inode numbers are not output.
+              return (value.st_dev, value.st_ino, value.st_rdev,
+                      value.st_mode, value.st_uid, value.st_gid)
+
+          def collect(system=os, cpu_reader=read_cpu_flags):
+              result = {
+                  "schema_version": 1,
+                  "scope": "metadata_only_no_device_open",
+                  "status": "BLOCK",
+                  "reasons": [],
+                  "identity": {"uid": None, "gid": None, "euid": None,
+                               "egid": None, "supplementary_gids": None},
+                  "kvm": {"present": None, "type": None, "uid": None,
+                          "gid": None, "mode_octal": None,
+                          "effective_read": None, "effective_write": None,
+                          "metadata_unchanged_during_sample": None},
+                  "cpu_first_flags": {"vmx": None, "svm": None, "hypervisor": None},
+                  "storage": {"workspace_available_bytes": None,
+                              "tmp_available_bytes": None, "same_filesystem": None},
+                  "kvm_ioctl_tested": False,
+                  "emulator_started": False,
+              }
+              reasons = result["reasons"]
+              try:
+                  identity = {key: bounded_int(getter(), 2**32 - 1)
+                              for key, getter in (("uid", system.getuid),
+                                                  ("gid", system.getgid),
+                                                  ("euid", system.geteuid),
+                                                  ("egid", system.getegid))}
+                  groups = system.getgroups()
+                  if len(groups) > MAX_GROUPS:
+                      raise ValueError("too many groups")
+                  identity["supplementary_gids"] = sorted(
+                      {bounded_int(group, 2**32 - 1) for group in groups})
+                  result["identity"] = identity
+                  if identity["uid"] == 0 or identity["euid"] == 0:
+                      reasons.append("NONROOT_IDENTITY_REQUIRED")
+              except Exception:
+                  reasons.append("IDENTITY_METADATA_UNAVAILABLE")
+
+              try:
+                  first = system.lstat("/dev/kvm")
+                  kvm = result["kvm"]
+                  kvm.update(present=True, type=node_type(first.st_mode),
+                             uid=bounded_int(first.st_uid, 2**32 - 1),
+                             gid=bounded_int(first.st_gid, 2**32 - 1),
+                             mode_octal=format(stat.S_IMODE(first.st_mode), "04o"))
+                  if not stat.S_ISCHR(first.st_mode):
+                      reasons.append("KVM_NOT_CHARACTER_DEVICE")
+                  else:
+                      kvm["effective_read"] = system.access(
+                          "/dev/kvm", os.R_OK, effective_ids=True, follow_symlinks=False)
+                      kvm["effective_write"] = system.access(
+                          "/dev/kvm", os.W_OK, effective_ids=True, follow_symlinks=False)
+                      if not (kvm["effective_read"] and kvm["effective_write"]):
+                          reasons.append("KVM_EFFECTIVE_ACCESS_MISSING")
+                      second = system.lstat("/dev/kvm")
+                      kvm["metadata_unchanged_during_sample"] = (
+                          node_identity(first) == node_identity(second))
+                      if not kvm["metadata_unchanged_during_sample"]:
+                          reasons.append("KVM_METADATA_CHANGED")
+              except FileNotFoundError:
+                  if result["kvm"]["present"] is None:
+                      result["kvm"]["present"] = False
+                      reasons.append("KVM_ABSENT")
+                  else:
+                      reasons.append("KVM_METADATA_UNAVAILABLE")
+              except Exception:
+                  reasons.append("KVM_METADATA_UNAVAILABLE")
+
+              try:
+                  result["cpu_first_flags"] = cpu_reader()
+              except Exception:
+                  reasons.append("CPU_FLAGS_UNAVAILABLE")
+
+              try:
+                  # Literal /tmp is intentional; no environment or path discovery.
+                  for path, key in ((".", "workspace_available_bytes"),
+                                    ("/tmp", "tmp_available_bytes")):
+                      value = system.statvfs(path)
+                      result["storage"][key] = bounded_int(
+                          value.f_bavail * value.f_frsize, 2**63 - 1)
+                  result["storage"]["same_filesystem"] = (
+                      system.stat(".").st_dev == system.stat("/tmp").st_dev)
+              except Exception:
+                  reasons.append("STORAGE_METADATA_UNAVAILABLE")
+
+              # CPU flag booleans and free-space values are observations, not gates.
+              # os.access is advisory and does not establish open/ioctl/boot success.
+              if not reasons:
+                  result["status"] = "METADATA_CONDITIONS_MET"
+              return result
+
+          def validate_result(result):
+              def keys(value, expected):
+                  if (type(value) is not dict or any(type(key) is not str for key in value)
+                          or set(value) != set(expected.split())):
+                      raise ValueError("invalid fields")
+
+              def optional_int(value, limit):
+                  if value is not None:
+                      bounded_int(value, limit)
+
+              def optional_bool(value):
+                  if value is not None and type(value) is not bool:
+                      raise ValueError("invalid boolean")
+
+              keys(result, "schema_version scope status reasons identity kvm cpu_first_flags "
+                           "storage kvm_ioctl_tested emulator_started")
+              if (type(result["schema_version"]) is not int or result["schema_version"] != 1
+                      or type(result["scope"]) is not str
+                      or result["scope"] != "metadata_only_no_device_open"
+                      or type(result["status"]) is not str
+                      or result["kvm_ioctl_tested"] is not False
+                      or result["emulator_started"] is not False):
+                  raise ValueError("invalid fixed fields")
+              allowed = {"NONROOT_IDENTITY_REQUIRED", "IDENTITY_METADATA_UNAVAILABLE",
+                         "KVM_NOT_CHARACTER_DEVICE", "KVM_EFFECTIVE_ACCESS_MISSING",
+                         "KVM_METADATA_CHANGED", "KVM_ABSENT", "KVM_METADATA_UNAVAILABLE",
+                         "CPU_FLAGS_UNAVAILABLE", "STORAGE_METADATA_UNAVAILABLE"}
+              reasons = result["reasons"]
+              if (type(reasons) is not list or len(reasons) > len(allowed)
+                      or any(type(reason) is not str or reason not in allowed for reason in reasons)
+                      or len(set(reasons)) != len(reasons)):
+                  raise ValueError("invalid reasons")
+              if result["status"] != ("BLOCK" if reasons else "METADATA_CONDITIONS_MET"):
+                  raise ValueError("inconsistent status")
+
+              identity = result["identity"]
+              keys(identity, "uid gid euid egid supplementary_gids")
+              for key in ("uid", "gid", "euid", "egid"):
+                  optional_int(identity[key], 2**32 - 1)
+              groups = identity["supplementary_gids"]
+              if groups is not None:
+                  if type(groups) is not list or len(groups) > MAX_GROUPS:
+                      raise ValueError("invalid groups")
+                  for group in groups:
+                      bounded_int(group, 2**32 - 1)
+                  if groups != sorted(set(groups)):
+                      raise ValueError("noncanonical groups")
+
+              kvm = result["kvm"]
+              keys(kvm, "present type uid gid mode_octal effective_read effective_write "
+                        "metadata_unchanged_during_sample")
+              for key in ("present", "effective_read", "effective_write", "metadata_unchanged_during_sample"):
+                  optional_bool(kvm[key])
+              for key in ("uid", "gid"):
+                  optional_int(kvm[key], 2**32 - 1)
+              if kvm["type"] is not None and (type(kvm["type"]) is not str or kvm["type"] not in (
+                      "character", "symlink", "regular", "block", "directory", "other")):
+                  raise ValueError("invalid node type")
+              mode = kvm["mode_octal"]
+              if mode is not None and (type(mode) is not str or len(mode) != 4
+                                       or any(digit not in "01234567" for digit in mode)):
+                  raise ValueError("invalid mode")
+              if kvm["present"] is False and any(kvm[key] is not None for key in kvm if key != "present"):
+                  raise ValueError("inconsistent missing device")
+              if "KVM_EFFECTIVE_ACCESS_MISSING" in reasons and any(
+                      type(kvm[key]) is not bool for key in ("effective_read", "effective_write")):
+                  raise ValueError("inconsistent access result")
+
+              cpu = result["cpu_first_flags"]
+              keys(cpu, "vmx svm hypervisor")
+              for value in cpu.values():
+                  optional_bool(value)
+              storage = result["storage"]
+              keys(storage, "workspace_available_bytes tmp_available_bytes same_filesystem")
+              for key in ("workspace_available_bytes", "tmp_available_bytes"):
+                  optional_int(storage[key], 2**63 - 1)
+              optional_bool(storage["same_filesystem"])
+
+              complete = (all(value is not None for section in (identity, kvm, cpu, storage)
+                              for value in section.values())
+                          and identity["uid"] != 0 and identity["euid"] != 0
+                          and kvm["present"] is True and kvm["type"] == "character"
+                          and kvm["effective_read"] is True and kvm["effective_write"] is True
+                          and kvm["metadata_unchanged_during_sample"] is True)
+              if not reasons and not complete:
+                  raise ValueError("incomplete positive metadata")
+              return 1 if reasons else 0
+
+          def main(collector=collect):
+              try:
+                  result = collector()
+                  exit_code = validate_result(result)
+                  encoded = json.dumps(result, sort_keys=True, separators=(",", ":"),
+                                       ensure_ascii=True, allow_nan=False)
+                  if len(encoded.encode("ascii")) > MAX_JSON_BYTES:
+                      raise ValueError("oversized output")
+              except Exception:
+                  encoded = '{"reasons":["INTERNAL_ERROR"],"schema_version":1,"status":"BLOCK"}'
+                  exit_code = 1
+              print(encoded)
+              return exit_code
+
+          if __name__ == "__main__":
+              sys.exit(main())

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""One owned ordinary AVD, six unsent-retry instrumentation methods, no artifact upload/retry."""
+"""One owned ordinary AVD, one 503 retry diagnostic instrumentation method, no artifact upload/retry."""
 import hashlib, json, os, pathlib, re, shutil, socket, subprocess, tempfile, time, signal
 
 HERE = pathlib.Path(__file__).resolve().parent
-APK = [('app.apk', 77991914, '7aaaf6bfc74e0b885373b0803fd1c31d2b60986ee7e6994bc3979dca04c01ef6'), ('tests.apk', 951225, '6f46d6e19afbd4e45b022915ab2a6a16d7c2b01624b13c81848f4f099c03e4b0')]
+APK = [('app.apk', 77991914, '7aaaf6bfc74e0b885373b0803fd1c31d2b60986ee7e6994bc3979dca04c01ef6'), ('tests.apk', 951225, 'c848d779f8fd3d1da65cdbddbc1f754dfb231f80d478477493ebee886d262332')]
 TARGET = 'net.ankio.auto'
 IMAGE = 'system-images;android-34;google_apis;x86_64'
 
@@ -68,6 +68,28 @@ def recovery_diagnostic(text):
     return {'recovery_stages':stages, 'recovery_failure_kinds':kinds}
 
 
+RETRY_RECEIVER_STAGES = frozenset({'ACCEPT', 'HEADER_READ', 'HEADER_COMPLETE',
+    'REQUEST_LINE', 'CONTENT_LENGTH', 'BODY_READ', 'BODY_CONTENT',
+    'RESPONSE_WRITE', 'WORKER_JOIN', 'CLOSED'})
+def retry_receiver_diagnostic(text):
+    records=[]; invalid=False
+    for line in text.splitlines():
+        if not line.startswith('INSTRUMENTATION_STATUS: retryReceiver='): continue
+        value=line.removeprefix('INSTRUMENTATION_STATUS: retryReceiver=')
+        fields=value.split('|')
+        if len(fields)!=6 or fields[0] not in RETRY_RECEIVER_STAGES or not all(
+            re.fullmatch(r'(?:0|[1-9][0-9]?)', x) for x in fields[1:5]) or fields[5] not in ('0','1'):
+            invalid=True; continue
+        started,complete,partial,empty,stopped=map(int,fields[1:])
+        if complete+partial!=started:
+            invalid=True; continue
+        record=dict(stage=fields[0],started=started,complete=complete,partial=partial,
+                    empty_connections=empty,worker_stopped=bool(stopped))
+        if record not in records: records.append(record)
+    if invalid or len(records)>1: return {'retry_receiver_status':'INVALID_OR_CONFLICTING'}
+    return {'retry_receiver':records[0]} if records else {}
+
+
 def safe_diagnostic(text):
     # Emit only fixed diagnostic labels and test-owned stack coordinates, never raw values.
     labels = {
@@ -103,6 +125,7 @@ def safe_diagnostic(text):
     result['test_stack_frames']=[]  # No free-form stack values in this diagnostic candidate.
     result.update(phase_diagnostic(text))
     result.update(recovery_diagnostic(text))
+    result.update(retry_receiver_diagnostic(text))
     return result
 
 
@@ -255,14 +278,9 @@ def execute():
             except Exception:
                 print(json.dumps({'method':method,**safe_diagnostic(out)}),flush=True)
                 raise
-            print(json.dumps({'method':method,**recovery_diagnostic(out)}),flush=True)
+            print(json.dumps({'method':method,**recovery_diagnostic(out),**retry_receiver_diagnostic(out)}),flush=True)
             print(json.dumps({'method':method,'status':'PASS'}),flush=True)
             return parsed
-        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'typedUnsentFailureHasThreeAttemptBound')
-        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'ambiguousIoFailureDoesNotRetry')
-        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'cancellationDuringBackoffStopsFurtherAttempts')
-        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'serverRecoversAfterRefusedConnectionReceivesExactlyOnePost')
-        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'lostResponseAfterPostMustNotReplay')
         test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'retryAfterZeroMustNotTriggerHiddenPostReplay')
         success=True
     except Exception as e:

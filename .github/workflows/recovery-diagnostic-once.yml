@@ -35,7 +35,11 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
       - name: Verify exact paired APK payload
-        run: python3 .recovery-diagnostic/unpack.py
+        run: |
+          set -euo pipefail
+          python3 .recovery-diagnostic/unpack.py
+          echo "6f46d6e19afbd4e45b022915ab2a6a16d7c2b01624b13c81848f4f099c03e4b0  .recovery-diagnostic/tests-event.apk" | sha256sum --check --status
+          cp .recovery-diagnostic/tests-event.apk .recovery-diagnostic/payload/tests.apk
       - name: Official emulator prerequisites with existing licenses only
         run: |
           set -euo pipefail

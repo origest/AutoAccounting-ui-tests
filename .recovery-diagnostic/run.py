@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""One owned ordinary AVD, one recovery diagnostic instrumentation method, no artifact upload/retry."""
+"""One owned ordinary AVD, six unsent-retry instrumentation methods, no artifact upload/retry."""
 import hashlib, json, os, pathlib, re, shutil, socket, subprocess, tempfile, time, signal
 
 HERE = pathlib.Path(__file__).resolve().parent
-APK = [('app.apk', 77991914, '7aaaf6bfc74e0b885373b0803fd1c31d2b60986ee7e6994bc3979dca04c01ef6'), ('tests.apk', 914361, 'e035f2230771dc8c4bf040ec47918413c12ece847d8b32770658106e4194b5c7')]
+APK = [('app.apk', 77991914, '7aaaf6bfc74e0b885373b0803fd1c31d2b60986ee7e6994bc3979dca04c01ef6'), ('tests.apk', 951225, '6f46d6e19afbd4e45b022915ab2a6a16d7c2b01624b13c81848f4f099c03e4b0')]
 TARGET = 'net.ankio.auto'
 IMAGE = 'system-images;android-34;google_apis;x86_64'
 
@@ -258,7 +258,12 @@ def execute():
             print(json.dumps({'method':method,**recovery_diagnostic(out)}),flush=True)
             print(json.dumps({'method':method,'status':'PASS'}),flush=True)
             return parsed
-        test('net.ankio.auto.xposed.hooks.common.OwnedHostRecoveryDeviceTest', 'occupiedPortThenStoppedOwnedServerRecovers')
+        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'typedUnsentFailureHasThreeAttemptBound')
+        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'ambiguousIoFailureDoesNotRetry')
+        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'cancellationDuringBackoffStopsFurtherAttempts')
+        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'serverRecoversAfterRefusedConnectionReceivesExactlyOnePost')
+        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'lostResponseAfterPostMustNotReplay')
+        test('net.ankio.auto.http.UnsentHookRetryDeviceTest', 'retryAfterZeroMustNotTriggerHiddenPostReplay')
         success=True
     except Exception as e:
         failure=type(e).__name__+': '+str(e)

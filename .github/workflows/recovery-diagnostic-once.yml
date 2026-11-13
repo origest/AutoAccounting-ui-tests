@@ -1,0 +1,64 @@
+name: Recovery diagnostic one-shot (blank emulator)
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact approved 40-character commit SHA on main
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: recovery-diagnostic-one-shot
+  cancel-in-progress: false
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+    steps:
+      - name: Validate exact public one-shot scope
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = origest/AutoAccounting-ui-tests
+          test "$REPOSITORY_PRIVATE" = false
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$EXPECTED_COMMIT" = "$GITHUB_SHA"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify exact paired APK payload
+        run: python3 .recovery-diagnostic/unpack.py
+      - name: Official emulator prerequisites with existing licenses only
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_SDK_ROOT"
+          test -s "$ANDROID_SDK_ROOT/licenses/android-sdk-license"
+          timeout 90 "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            'platform-tools' 'emulator' 'system-images;android-34;google_apis;x86_64' </dev/null
+      - name: One blank-device test with temporary process KVM group if needed
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm
+          if test -r /dev/kvm && test -w /dev/kvm; then
+            timeout --signal=TERM --kill-after=50s 420s python3 .recovery-diagnostic/run.py
+          else
+            KVM_GID=$(stat -c %g /dev/kvm)
+            GROUPS_CSV=$( (id -G; echo "$KVM_GID") | tr ' ' '\n' | sort -nu | paste -sd,)
+            # One child only: set supplementary groups, immediately drop uid/gid.
+            # No chmod/chown/usermod, persistent access, guest root or appops grant.
+            sudo -n setpriv --reuid="$(id -u)" --regid="$(id -g)" --groups="$GROUPS_CSV" \
+              env PATH="$PATH" HOME="$HOME" ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
+              GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" \
+              GITHUB_REF="$GITHUB_REF" GITHUB_REF_NAME="$GITHUB_REF_NAME" \
+              GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" GITHUB_SHA="$GITHUB_SHA" \
+              REPOSITORY_PRIVATE="$REPOSITORY_PRIVATE" EXPECTED_COMMIT="$EXPECTED_COMMIT" \
+              timeout --signal=TERM --kill-after=50s 420s python3 .recovery-diagnostic/run.py
+          fi

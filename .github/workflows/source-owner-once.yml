@@ -1,0 +1,29 @@
+name: Source owner lifecycle once
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact 40-character main commit containing reviewed source and workflow
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: source-owner-one-shot
+  cancel-in-progress: false
+jobs:
+  source-owner:
+    if: github.repository == 'origest/AutoAccounting-ui-tests' && github.event.repository.private == false && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Build reviewed source and run blank-device lifecycle once
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          REPOSITORY_PRIVATE: 'false'
+        run: python3 .source-owner/run-source.py

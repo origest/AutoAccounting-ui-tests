@@ -26,4 +26,7 @@ jobs:
         env:
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           REPOSITORY_PRIVATE: 'false'
-        run: python3 .source-owner/run-source.py
+        run: bash .source-owner/with-kvm-acl.sh
+      - name: Verify original KVM ACL restored
+        if: always()
+        run: bash .source-owner/with-kvm-acl.sh --restore

@@ -1,0 +1,53 @@
+{
+  "apks": [
+    {
+      "bytes": 77409046,
+      "path": "app.apk",
+      "sha256": "ccff159a34dc68629471429315b03b70453dc43aac69bf143d4089896a2c2e4b"
+    },
+    {
+      "bytes": 990876,
+      "path": "tests.apk",
+      "sha256": "c697811c25c7475b1c55ce923925dd07d53e6dc2cdf89392edc09fad2714a9b9"
+    }
+  ],
+  "archive_bytes": 50981705,
+  "archive_sha256": "8a0ee2bdfcc568fe08a92f0c5dc7ad375ef5c4ef0e3130dc43c966f3d7eb0b0f",
+  "parts": [
+    {
+      "bytes": 8388608,
+      "path": "payload.part000",
+      "sha256": "7626139adfd9825a6f2a72efd984a1a2d721f70c82ee5022743d3c3c0c839d90"
+    },
+    {
+      "bytes": 8388608,
+      "path": "payload.part001",
+      "sha256": "b43fadedeb608db152022ef111353669552b16fe7dff32eae3e1f3788723b0e6"
+    },
+    {
+      "bytes": 8388608,
+      "path": "payload.part002",
+      "sha256": "160c9f4491ee0fc9baf12f99e9065e2873b603ecc75120d075c4aa0b883a9873"
+    },
+    {
+      "bytes": 8388608,
+      "path": "payload.part003",
+      "sha256": "d9f93a63d43d9133361a74c2f49b2c10c04d83caaa1c4f414f172c54a1e4895e"
+    },
+    {
+      "bytes": 8388608,
+      "path": "payload.part004",
+      "sha256": "30cfe29a5110553d95dce0ff668637695e910cbdbd03e74ef8017c7daf40bddb"
+    },
+    {
+      "bytes": 8388608,
+      "path": "payload.part005",
+      "sha256": "21cdf5d0d3130f154a7923382de4e9b4cfcdab7f1948e3b77d9328ce7fa63ee7"
+    },
+    {
+      "bytes": 650057,
+      "path": "payload.part006",
+      "sha256": "04987db69a4633549d0c3ef432e79083185b253260392cb1735968efc4a4b4d1"
+    }
+  ]
+}

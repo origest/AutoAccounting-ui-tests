@@ -34,7 +34,7 @@ class AnalysisCommitWaitDeviceTest {
     @Test fun insertedBillSurvivesClientTimeoutWithoutReplay() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         fun progress(value: String) {
-            check(value in setOf("APP_START", "APP_READY", "ROOM_READY", "JS_NATIVE_INIT", "JS_SANITY_OK", "RULE_READY", "SERVER_READY", "REQUEST_RECEIVED", "BEFORE_SECOND_CATEGORY", "CLIENT_READ_TIMEOUT", "FINISHED"))
+            check(value in setOf("APP_START", "APP_READY", "ROOM_READY", "JS_NATIVE_INIT", "MIMALLOC_LOADED", "QUICKJS_LOADED", "EMPTY_RUNTIME_CREATED", "EMPTY_CONTEXT_CREATED", "EMPTY_CONTEXT_CLOSED", "EMPTY_RUNTIME_CLOSE_START", "EMPTY_RUNTIME_CLOSED", "EXECUTOR_SANITY_START", "JS_SANITY_OK", "RULE_READY", "SERVER_READY", "REQUEST_RECEIVED", "BEFORE_SECOND_CATEGORY", "CLIENT_READ_TIMEOUT", "FINISHED"))
             instrumentation.sendStatus(1, android.os.Bundle().apply { putString("analysisProgress", value) })
         }
         fun clientOutcome(value: String) {
@@ -65,7 +65,32 @@ class AnalysisCommitWaitDeviceTest {
         try {
         progress("JS_NATIVE_INIT")
         System.loadLibrary("mimalloc")
+        progress("MIMALLOC_LOADED")
         System.loadLibrary("quickjs-android")
+        progress("QUICKJS_LOADED")
+        // Diagnostic-only empty lifecycle, exact packaged dependency via reflection.
+        val builderType = Class.forName("com.shiqi.quickjs.QuickJS\$Builder")
+        val builder = builderType.getDeclaredConstructor().newInstance()
+        val quickJs = builderType.getMethod("build").invoke(builder)
+        val nativeRuntime = quickJs.javaClass.getMethod("createJSRuntime").invoke(quickJs) as java.io.Closeable
+        try {
+            progress("EMPTY_RUNTIME_CREATED")
+            val nativeContext = nativeRuntime.javaClass.getMethod("createJSContext").invoke(nativeRuntime) as java.io.Closeable
+            try {
+                progress("EMPTY_CONTEXT_CREATED")
+            } finally {
+                nativeContext.close()
+            }
+            progress("EMPTY_CONTEXT_CLOSED")
+        } finally {
+            try {
+                progress("EMPTY_RUNTIME_CLOSE_START")
+            } finally {
+                nativeRuntime.close()
+            }
+        }
+        progress("EMPTY_RUNTIME_CLOSED")
+        progress("EXECUTOR_SANITY_START")
         org.ezbook.server.engine.JsExecutor().use { js ->
             assertEquals("synthetic-js-ready", js.run("'synthetic-js-ready'"))
         }

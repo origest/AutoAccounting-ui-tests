@@ -52,7 +52,7 @@ def failure_signals(text):
     return tuple(sorted(label for marker,label in FAILURE_SIGNALS.items() if marker in text))
 
 
-PROGRESS = frozenset(('APP_START','APP_READY','ROOM_READY','JS_NATIVE_INIT','JS_SANITY_OK',
+PROGRESS = frozenset(('APP_START','APP_READY','ROOM_READY','JS_NATIVE_INIT','MIMALLOC_LOADED','QUICKJS_LOADED','EMPTY_RUNTIME_CREATED','EMPTY_CONTEXT_CREATED','EMPTY_CONTEXT_CLOSED','EMPTY_RUNTIME_CLOSE_START','EMPTY_RUNTIME_CLOSED','EXECUTOR_SANITY_START','JS_SANITY_OK',
  'RULE_READY','SERVER_READY','REQUEST_RECEIVED','BEFORE_SECOND_CATEGORY','CLIENT_READ_TIMEOUT','FINISHED'))
 CLIENT_OUTCOMES = frozenset(('HTTP_2XX','HTTP_4XX','HTTP_5XX','HTTP_OTHER','READ_TIMEOUT','IO_OTHER'))
 
@@ -73,6 +73,31 @@ def safe_evidence(text):
     for label in sorted({code for key,code in codes.items() if key in text}):
         print('DIAGNOSTIC_'+label,flush=True)
 
+
+
+def exit_info_labels(text):
+    # Android 14 ApplicationExitInfo.dump layout. Fail closed if ambiguous.
+    if len(text) > 65536: return ('TOO_LARGE',)
+    records = re.findall(r'^\s*process=([^ ]+) reason=(\d+) \((.+)\) subreason=\d+ \([^)]*\) status=(\d+)\s*$', text, re.M)
+    records = [r for r in records if r[0] == TARGET]
+    if not records: return ('NO_MATCH',)
+    if len(records) != 1: return ('AMBIGUOUS',)
+    _, reason, name, status = records[0]
+    expected = {'2':'SIGNALED','3':'LOW_MEMORY','4':'APP CRASH(EXCEPTION)','5':'APP CRASH(NATIVE)','6':'ANR','7':'INITIALIZATION FAILURE'}
+    if expected.get(reason) != name: return ('OTHER',)
+    result = ['REASON_'+{'2':'SIGNALED','3':'LOW_MEMORY','4':'APP_CRASH','5':'CRASH_NATIVE','6':'ANR','7':'INITIALIZATION_FAILURE'}[reason]]
+    if reason in ('2','5'):
+        result.append('SIGNAL_'+{'6':'ABRT','11':'SEGV','7':'BUS','4':'ILL','9':'KILL'}.get(status,'OTHER'))
+    return tuple(result)
+
+def safe_exit_info(adb, port, env):
+    # Only our fresh synthetic package; never raw logcat, traces, dumps or user data.
+    try:
+        r=subprocess.run([str(adb),'-P',str(port),'-s','emulator-5580','shell','dumpsys','activity','exit-info',TARGET],
+            env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=10)
+        labels=exit_info_labels(r.stdout) if r.returncode==0 else ('UNAVAILABLE',)
+    except Exception:labels=('UNAVAILABLE',)
+    for label in labels:print('DIAGNOSTIC_EXIT_'+label,flush=True)
 
 def stop_owned(process):
     if process is None: return True
@@ -161,7 +186,9 @@ def _execute(built, rawlog, mark, report):
                               stderr=subprocess.STDOUT,timeout=min(timeout,remaining))
         with open(rawlog,'a') as f: f.write(result.stdout)
         if result.returncode:
-            if 'instrument' in args:safe_evidence(result.stdout)
+            if 'instrument' in args:
+                safe_evidence(result.stdout)
+                safe_exit_info(adb,port,env)
             raise RuntimeError('DEVICE_COMMAND')
         return result.stdout
     def a(*args,timeout=60):return cmd([adb,'-P',str(port),'-s','emulator-5580',*args],timeout)
@@ -197,6 +224,7 @@ def _execute(built, rawlog, mark, report):
         out=a('shell','am','instrument','-w','-r','-e','freshAnalysisFixture','true','-e','class',
               TEST_CLASS+'#'+TEST_METHOD,TARGET+'.test/androidx.test.runner.AndroidJUnitRunner',timeout=180)
         safe_evidence(out)
+        if failure_signals(out):safe_exit_info(adb,port,env)
         mark('RESULT_VALIDATION')
         parse_result(out)
         mark('COMPLETE')

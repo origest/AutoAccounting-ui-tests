@@ -10,6 +10,25 @@ def good():
  for stage in r.EXPECTED_STAGES:out+=f'INSTRUMENTATION_STATUS: analysisStage={stage}\nINSTRUMENTATION_STATUS_CODE: 1\n'
  return out+f'INSTRUMENTATION_STATUS: class={r.TEST_CLASS}\nINSTRUMENTATION_STATUS: test={r.TEST_METHOD}\nINSTRUMENTATION_STATUS_CODE: 0\nOK (1 test)\nINSTRUMENTATION_CODE: -1\n'
 class Contract(unittest.TestCase):
+ def test_exit_info_fixed_labels_and_target_only(self):
+  text='  process='+r.TARGET+' reason=5 (APP CRASH(NATIVE)) subreason=0 (UNKNOWN) status=11\n  description=secret'
+  self.assertEqual(r.exit_info_labels(text),('REASON_CRASH_NATIVE','SIGNAL_SEGV'))
+  self.assertEqual(r.exit_info_labels(text.replace(r.TARGET,'other.private.app')),('NO_MATCH',))
+  self.assertEqual(r.exit_info_labels(text+'\n'+text),('AMBIGUOUS',))
+  self.assertEqual(r.exit_info_labels(text.replace('APP CRASH(NATIVE)','secret')),('OTHER',))
+  self.assertEqual(r.exit_info_labels('x'*65537),('TOO_LARGE',))
+ def test_exit_info_unavailable_does_not_fail_or_leak(self):
+  out=io.StringIO()
+  with mock.patch.object(r.subprocess,'run',side_effect=RuntimeError('secret')),contextlib.redirect_stdout(out):r.safe_exit_info('adb',123,{})
+  self.assertEqual(out.getvalue(),'DIAGNOSTIC_EXIT_UNAVAILABLE\n')
+ def test_empty_lifecycle_probe_is_fixture_only(self):
+  text=(HERE/'AnalysisCommitWaitDeviceTest.kt').read_text()
+  for value in ['MIMALLOC_LOADED','QUICKJS_LOADED','EMPTY_CONTEXT_CLOSED','EMPTY_RUNTIME_CLOSE_START','EMPTY_RUNTIME_CLOSED','EXECUTOR_SANITY_START']:self.assertIn(value,text);self.assertIn(value,r.PROGRESS)
+ def test_progress_failure_cannot_skip_native_cleanup(self):
+  text=(HERE/'AnalysisCommitWaitDeviceTest.kt').read_text()
+  self.assertIn('try {\n            progress("EMPTY_RUNTIME_CREATED")',text)
+  self.assertIn('finally {\n                nativeContext.close()',text)
+  self.assertIn('finally {\n                nativeRuntime.close()',text)
  def test_failure_diagnostics_closed_vocabulary(self):
   for error,reason in [(RuntimeError('DEVICE_COMMAND'),'DEVICE_COMMAND'),(RuntimeError('secret-token'),'UNCLASSIFIED'),(RuntimeError(['secret']),'UNCLASSIFIED'),
       (RuntimeError('DEVICE_COMMAND','secret-token'),'UNCLASSIFIED'),(r.subprocess.TimeoutExpired('secret-command',1),'COMMAND_TIMEOUT'),

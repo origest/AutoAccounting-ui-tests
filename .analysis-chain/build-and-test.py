@@ -11,7 +11,7 @@ def read_reviewed_inputs(here):
     if manifest.get('review_ready') is not True:raise Blocked('INPUT_REVIEW_PENDING')
     if manifest.get('scope')!='synthetic-analysis-post-insert-timeout-only':raise Blocked('INPUT_SCOPE')
     files=manifest.get('files',{})
-    expected={'analysis-source.zip','run-emulator.py'}
+    expected={'analysis-source.zip','run-emulator.py','apply-split.py','AnalysisPersistenceWithoutJsDeviceTest.kt'}
     if set(files)!=expected:raise Blocked('INPUT_FILES')
     for name,info in files.items():
         p=here/name
@@ -75,6 +75,10 @@ def execute():
                     if not runner.stop_owned(process):raise Blocked('BUILD_CLEANUP_INCOMPLETE')
             if process.returncode:raise Blocked('BUILD_OR_SDK_COMMAND')
         unpack(here/'analysis-source.zip',parallel)
+        overlay_spec=importlib.util.spec_from_file_location('split_overlay',here/'apply-split.py')
+        overlay=importlib.util.module_from_spec(overlay_spec);overlay_spec.loader.exec_module(overlay)
+        overlay.apply(parallel,here)
+        stage('SYNTHETIC_PERSISTENCE_WITHOUT_JS')
         wrapper=parallel/'gradle/wrapper/gradle-wrapper.properties';s=wrapper.read_text()
         if 'distributionUrl=https\\://services.gradle.org/distributions/gradle-8.11.1-bin.zip' not in s or 'distributionSha256Sum=' in s:
             raise Blocked('GRADLE_PIN')

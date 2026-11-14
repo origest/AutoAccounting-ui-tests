@@ -7,8 +7,16 @@
       "sha256": "8e683847f99448a163ffe8cfb109f5dd4820a8022a1c8c2cb6c92091208e4bec"
     },
     "run-emulator.py": {
-      "size": 13429,
-      "sha256": "c10e01e2b17be52cf3bd7915e3cf20b92f7d007b0a34567ac8849a1d4504af4c"
+      "size": 13476,
+      "sha256": "d31aea2656fc75847f65c6a61885bdd0536c8618c33a1c4e2758dfacc022538e"
+    },
+    "apply-split.py": {
+      "size": 1560,
+      "sha256": "4a1377d5eded774edc8d910b4d39357809221379a283046a999491a70b12f23a"
+    },
+    "AnalysisPersistenceWithoutJsDeviceTest.kt": {
+      "size": 10402,
+      "sha256": "c3414ef9f46c0299f48cf612fe55a8501584c45fc9badc919a8641f8b6f5edbc"
     }
   }
 }

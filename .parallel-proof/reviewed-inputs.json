@@ -1,0 +1,42 @@
+{
+  "review_ready": true,
+  "scope": "synthetic-baseline-substitute-only",
+  "files": {
+    "parallel-source.zip": {
+      "size": 13738245,
+      "sha256": "7ead7a84f37904432b0805d1e91ceba4873d01c1dabd3666875a3aeb56cbd617"
+    },
+    "run-emulator.py": {
+      "size": 8151,
+      "sha256": "ed7a4a9c51892c2b8966094150317379c9cadfc1a9a73b18ad807510f37c745c"
+    },
+    "baseline/build.gradle.kts": {
+      "size": 70,
+      "sha256": "4ab48e33fe220881736242a49bcbbfb18149c78070381e10337fbaf392765811"
+    },
+    "baseline/settings.gradle.kts": {
+      "size": 221,
+      "sha256": "d6de251bdaa58d9d973ec714bdc7b3ef771a473843e2820e0d675310d0214209"
+    },
+    "baseline/app/build.gradle.kts": {
+      "size": 405,
+      "sha256": "829ace3e4fe01be03d656caadc401a12ebbb007a76d75b17ee9bc154a981b3c7"
+    },
+    "baseline/app/src/main/AndroidManifest.xml": {
+      "size": 734,
+      "sha256": "0d11989374599a78a7f7c3640837ee287c12addea64ad89c6c5512005035cce7"
+    },
+    "baseline/app/src/main/java/proof/baseline/SyntheticApplication.java": {
+      "size": 1473,
+      "sha256": "00775b6451231501ce87f842c2acbc1f7560b3f6ad6806a32cd171706e883fed"
+    },
+    "baseline/app/src/main/java/proof/baseline/SyntheticActivity.java": {
+      "size": 383,
+      "sha256": "f1779cb41483f1f05819278bb507e735bebb5872bc2b59632e6ddbad4c61eed7"
+    },
+    "baseline/app/src/main/java/proof/baseline/SyntheticStateProvider.java": {
+      "size": 1574,
+      "sha256": "75bf4ba5811df0bb50e16be659dc86b08a4d2cfab1f9fcb03769f25e6c6460cb"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "review_ready": true,
+  "scope": "synthetic-analysis-post-insert-timeout-only",
+  "files": {
+    "analysis-source.zip": {
+      "size": 13638119,
+      "sha256": "11de21fa818635bb705e9908a0f4383f45fc1fc15064a77c93af027801188d7a"
+    },
+    "run-emulator.py": {
+      "size": 7525,
+      "sha256": "70f799150d35062fdb5a5f9c509d146bb13b75b411770b596f6614efe330f815"
+    }
+  }
+}

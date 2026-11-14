@@ -1,0 +1,32 @@
+name: Synthetic analysis chain once
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact reviewed main commit; synthetic post-insert timeout only
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: analysis-chain-one-shot
+  cancel-in-progress: false
+jobs:
+  analysis-chain:
+    if: github.repository == 'origest/AutoAccounting-ui-tests' && github.event.repository.private == false && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Build and test reviewed synthetic analysis timeout proof
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          REPOSITORY_PRIVATE: 'false'
+        run: bash .analysis-chain/with-kvm-acl.sh
+      - name: Verify original KVM ACL restored
+        if: always()
+        run: bash .analysis-chain/with-kvm-acl.sh --restore

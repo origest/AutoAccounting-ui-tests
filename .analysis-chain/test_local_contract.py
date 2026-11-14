@@ -50,6 +50,47 @@ class Contract(unittest.TestCase):
     with self.assertRaises(OSError):r.execute(None,None)
    self.assertFalse(owned.exists());popen.assert_not_called()
    self.assertIn('STAGE_DEVICE_CLEANUP_OK',out.getvalue());self.assertNotIn('secret',out.getvalue())
+ def test_failure_banner_preserves_rejection_without_business_claim(self):
+  text='FAILURES!!!\nTests run: 1, Failures: 1\n'
+  self.assertEqual(r.failure_signals(text),('JUNIT_FAILURE_BANNER',))
+  out=io.StringIO()
+  with contextlib.redirect_stdout(out):r.safe_evidence(text)
+  self.assertEqual(out.getvalue(),'DIAGNOSTIC_TRANSCRIPT_JUNIT_FAILURE_BANNER\n')
+  with self.assertRaisesRegex(RuntimeError,'INSTRUMENTATION_FAILED'):r.parse_result(text)
+ def test_abort_marker_distinguished(self):
+  self.assertEqual(r.failure_signals('INSTRUMENTATION_ABORTED: arbitrary secret'),('ABORTED_MARKER',))
+  out=io.StringIO()
+  with contextlib.redirect_stdout(out):r.safe_evidence('INSTRUMENTATION_ABORTED: arbitrary secret')
+  self.assertNotIn('secret',out.getvalue())
+ def test_coroutine_timeout_is_only_fixed_hint(self):
+  out=io.StringIO()
+  with contextlib.redirect_stdout(out):r.safe_evidence('kotlinx.coroutines.TimeoutCancellationException: secret message')
+  self.assertEqual(out.getvalue(),'DIAGNOSTIC_COROUTINE_TIMEOUT\n')
+ def test_unknown_exception_stays_silent(self):
+  out=io.StringIO()
+  with contextlib.redirect_stdout(out):r.safe_evidence('CustomError: secret')
+  self.assertEqual(out.getvalue(),'')
+ def test_test_progress_does_not_grant_success_or_leak(self):
+  text='INSTRUMENTATION_STATUS: analysisProgress=JS_SANITY_OK\nINSTRUMENTATION_STATUS_CODE: 1\nINSTRUMENTATION_STATUS: analysisClient=secret-token\nINSTRUMENTATION_STATUS_CODE: 1\n'
+  out=io.StringIO()
+  with contextlib.redirect_stdout(out):r.safe_evidence(text)
+  self.assertEqual(out.getvalue(),'DIAGNOSTIC_TEST_PROGRESS_JS_SANITY_OK\nDIAGNOSTIC_CLIENT_UNRECOGNIZED\n')
+  with self.assertRaises(RuntimeError):r.parse_result(text)
+ def test_progress_bundles_do_not_weaken_final_contract(self):
+  prefix='INSTRUMENTATION_STATUS: analysisProgress=JS_SANITY_OK\nINSTRUMENTATION_STATUS_CODE: 1\n'
+  r.parse_result(prefix+good())
+  with self.assertRaises(RuntimeError):r.parse_result(prefix+good().replace('OK (1 test)','FAILURES!!!'))
+ def test_fixture_loads_native_and_sanity_before_request(self):
+  s=(HERE/'AnalysisCommitWaitDeviceTest.kt').read_text()
+  a=s.index('System.loadLibrary("mimalloc")');b=s.index('System.loadLibrary("quickjs-android")');c=s.index('js.run(');d=s.index('actualEngine.start(')
+  self.assertLess(a,b);self.assertLess(b,c);self.assertLess(c,d)
+  self.assertIn('assertEquals("synthetic-js-ready"',s)
+  self.assertIn('.retryOnConnectionFailure(false)',s)
+  self.assertIn('Setting.FEATURE_AI_AVAILABLE, "false"',s)
+ def test_native_link_error_is_fixed_hint(self):
+  out=io.StringIO()
+  with contextlib.redirect_stdout(out):r.safe_evidence('java.lang.UnsatisfiedLinkError: private-path')
+  self.assertEqual(out.getvalue(),'DIAGNOSTIC_NATIVE_LINK\n')
  def test_valid(self):r.parse_result(good())
  def test_diagnostics_never_echo_free_text(self):
   out=io.StringIO()

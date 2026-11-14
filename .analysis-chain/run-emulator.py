@@ -40,14 +40,35 @@ def parse_result(text):
     if tuple(stages)!=EXPECTED_STAGES: raise RuntimeError('STAGE_EVIDENCE')
 
 
+# These describe transcript signals, not which business assertion failed.
+FAILURE_SIGNALS = {
+ 'INSTRUMENTATION_FAILED': 'LAUNCH_FAILED_MARKER',
+ 'INSTRUMENTATION_ABORTED': 'ABORTED_MARKER',
+ 'FAILURES!!!': 'JUNIT_FAILURE_BANNER',
+ 'Process crashed': 'PROCESS_CRASH_MARKER',
+}
+
+def failure_signals(text):
+    return tuple(sorted(label for marker,label in FAILURE_SIGNALS.items() if marker in text))
+
+
+PROGRESS = frozenset(('APP_START','APP_READY','ROOM_READY','JS_NATIVE_INIT','JS_SANITY_OK',
+ 'RULE_READY','SERVER_READY','REQUEST_RECEIVED','BEFORE_SECOND_CATEGORY','CLIENT_READ_TIMEOUT','FINISHED'))
+CLIENT_OUTCOMES = frozenset(('HTTP_2XX','HTTP_4XX','HTTP_5XX','HTTP_OTHER','READ_TIMEOUT','IO_OTHER'))
+
 def safe_evidence(text):
     """Only reviewed stage enums and fixed diagnostic labels, never exception contents."""
+    for line in text.splitlines():
+        for key,allowed,prefix in [('analysisProgress',PROGRESS,'DIAGNOSTIC_TEST_PROGRESS_'),('analysisClient',CLIENT_OUTCOMES,'DIAGNOSTIC_CLIENT_')]:
+            m=re.fullmatch('INSTRUMENTATION_STATUS: '+key+'=(.*)',line)
+            if m:print(prefix+(m.group(1) if m.group(1) in allowed else 'UNRECOGNIZED'),flush=True)
+    for label in failure_signals(text):print('DIAGNOSTIC_TRANSCRIPT_'+label,flush=True)
     for line in text.splitlines():
         m=re.fullmatch(r'INSTRUMENTATION_STATUS: analysisStage=(.*)',line)
         if m:
             print('STAGE_ANALYSIS_'+(m.group(1) if m.group(1) in EXPECTED_STAGES else 'UNRECOGNIZED'),flush=True)
-    codes={'AssertionError':'ASSERTION','IllegalStateException':'PRECONDITION','TimeoutException':'TIMEOUT',
-        'SecurityException':'ANDROID_SECURITY','NoClassDefFoundError':'CLASS_MISSING',
+    codes={'UnsatisfiedLinkError':'NATIVE_LINK','AssertionError':'ASSERTION','IllegalStateException':'PRECONDITION','TimeoutException':'TIMEOUT',
+        'TimeoutCancellationException':'COROUTINE_TIMEOUT','SecurityException':'ANDROID_SECURITY','NoClassDefFoundError':'CLASS_MISSING',
         'INSTRUMENTATION_FAILED':'INSTRUMENTATION_FAILED','Process crashed':'APP_PROCESS_CRASH'}
     for label in sorted({code for key,code in codes.items() if key in text}):
         print('DIAGNOSTIC_'+label,flush=True)

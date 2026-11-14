@@ -10,6 +10,46 @@ def good():
  for stage in r.EXPECTED_STAGES:out+=f'INSTRUMENTATION_STATUS: analysisStage={stage}\nINSTRUMENTATION_STATUS_CODE: 1\n'
  return out+f'INSTRUMENTATION_STATUS: class={r.TEST_CLASS}\nINSTRUMENTATION_STATUS: test={r.TEST_METHOD}\nINSTRUMENTATION_STATUS_CODE: 0\nOK (1 test)\nINSTRUMENTATION_CODE: -1\n'
 class Contract(unittest.TestCase):
+ def test_failure_diagnostics_closed_vocabulary(self):
+  for error,reason in [(RuntimeError('DEVICE_COMMAND'),'DEVICE_COMMAND'),(RuntimeError('secret-token'),'UNCLASSIFIED'),(RuntimeError(['secret']),'UNCLASSIFIED'),
+      (RuntimeError('DEVICE_COMMAND','secret-token'),'UNCLASSIFIED'),(r.subprocess.TimeoutExpired('secret-command',1),'COMMAND_TIMEOUT'),
+      (FileNotFoundError('private-path'),'FILE_MISSING'),(PermissionError('private-path'),'PERMISSION_DENIED')]:
+   out=io.StringIO()
+   with contextlib.redirect_stdout(out):r.diagnostic_failure('INSTALL_TARGET',error)
+   self.assertEqual(out.getvalue(),f'DIAGNOSTIC_DEVICE_PHASE_INSTALL_TARGET\nDIAGNOSTIC_DEVICE_REASON_{reason}\n')
+ def test_unknown_phase_not_echoed(self):
+  out=io.StringIO()
+  with contextlib.redirect_stdout(out):r.diagnostic_failure('secret-account',ValueError('secret-token'))
+  self.assertEqual(out.getvalue(),'DIAGNOSTIC_DEVICE_PHASE_UNKNOWN\nDIAGNOSTIC_DEVICE_REASON_UNCLASSIFIED\n')
+ def test_primary_failure_survives_cleanup_failure_diagnostics(self):
+  def fake(built,rawlog,mark,report):
+   mark('INSTRUMENTATION');report(RuntimeError('DEVICE_COMMAND'))
+   raise RuntimeError('OWNED_CLEANUP_INCOMPLETE')
+  out=io.StringIO()
+  with mock.patch.object(r,'_execute',side_effect=fake),contextlib.redirect_stdout(out):
+   with self.assertRaisesRegex(RuntimeError,'OWNED_CLEANUP_INCOMPLETE'):r.execute(None,None)
+  self.assertEqual(out.getvalue().count('DIAGNOSTIC_DEVICE_REASON_'),1)
+  self.assertIn('REASON_DEVICE_COMMAND',out.getvalue())
+ def test_preflight_exception_is_diagnosed_and_remains_failure(self):
+  out=io.StringIO()
+  with mock.patch.object(r,'_execute',side_effect=FileNotFoundError('secret-path')),contextlib.redirect_stdout(out):
+   with self.assertRaises(FileNotFoundError):r.execute(None,None)
+  self.assertIn('PHASE_PREFLIGHT',out.getvalue());self.assertNotIn('secret',out.getvalue())
+ def test_all_operational_phases_have_markers(self):
+  text=(HERE/'run-emulator.py').read_text()
+  for phase in r.PHASES-{'PREFLIGHT','INSTALL_TARGET','INSTALL_TEST'}:self.assertIn("mark('"+phase+"')",text)
+  self.assertIn("mark('INSTALL_TARGET' if name=='target.apk' else 'INSTALL_TEST')",text)
+  self.assertIn("STAGE_DEVICE_CLEANUP_",text)
+ def test_initialization_failure_removes_owned_directory(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=pathlib.Path(tmp);sdk=root/'sdk';owned=root/'owned';owned.mkdir()
+   for name in ('platform-tools/adb','emulator/emulator','cmdline-tools/latest/bin/avdmanager'):
+    p=sdk/name;p.parent.mkdir(parents=True,exist_ok=True);p.touch()
+   out=io.StringIO()
+   with mock.patch.dict(os.environ,{'ANDROID_SDK_ROOT':str(sdk)}),mock.patch.object(r.os,'access',return_value=True),mock.patch.object(r.tempfile,'mkdtemp',return_value=str(owned)),mock.patch.object(r.socket,'socket',side_effect=OSError('secret-path')),mock.patch.object(r.subprocess,'Popen') as popen,contextlib.redirect_stdout(out):
+    with self.assertRaises(OSError):r.execute(None,None)
+   self.assertFalse(owned.exists());popen.assert_not_called()
+   self.assertIn('STAGE_DEVICE_CLEANUP_OK',out.getvalue());self.assertNotIn('secret',out.getvalue())
  def test_valid(self):r.parse_result(good())
  def test_diagnostics_never_echo_free_text(self):
   out=io.StringIO()
